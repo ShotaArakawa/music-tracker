@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  # 今回のJavaアプリ専用の新しいMySQL
+  music-db:
+    image: mysql:8.0
+    container_name: music_tracker_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: music_tracker_db    # 最初からこの名前で箱を作ってくれる
+      MYSQL_USER: tracker_user
+      MYSQL_PASSWORD: tracker_password
+    ports:
+      - "3307:3306" # 💡ポイント：前のMySQL(3306)と衝突しないように「3307」を使うよ！
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:

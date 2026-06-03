@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${song.title} + ' - 作曲コア'">作曲コア</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* ウィンドウサイズにぴったり追従させる（下部が間延びしない） */
+        html, body { height: 100%; }
+        body {
+            background-color: #f4f5f7;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ---- スクロール追従ヘッダー ---- */
+        .core-header {
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+            flex: 0 0 auto;
+            background: #fff;
+            border-bottom: 1px solid #e3e6ea;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .04);
+        }
+
+        /* ---- スプリットビュー（リサイズ可能な3エリア） ---- */
+        /* 残り高さ全部を使い切り、はみ出しは各パネル内でスクロールさせる */
+        #split {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            padding: 1rem;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        /* grow/shrink を許可し、3カラムで画面幅を必ず使い切る（右側が空白にならない） */
+        .panel {
+            flex: 1 1 auto;
+            min-width: 0;
+            max-height: 100%;
+            overflow: auto;
+        }
+
+        /* ---- エリア上部ヘッダーの高さを左右で揃える ---- */
+        .area-header {
+            min-height: 2.6rem;
+            flex: 0 0 auto;
+        }
+        .panel[data-panel="lyric"] { flex-basis: 39%; }
+        .panel[data-panel="chord"] { flex-basis: 39%; }
+        .panel[data-panel="info"]  { flex-basis: 22%; }
+
+        .gutter {
+            flex: 0 0 10px;
+            cursor: col-resize;
+            align-self: stretch;
+            position: relative;
+        }
+        .gutter::before {
+            content: "";
+            position: absolute;
+            top: 0; bottom: 0; left: 50%;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #d3d8de;
+            border-radius: 2px;
+        }
+        .gutter:hover::before { background: #0d6efd; }
+
+        @media (max-width: 991.98px) {
+            #split { flex-direction: column; }
+            .panel { flex-basis: auto !important; width: 100%; }
+            .gutter { display: none; }
+        }
+
+        /* ---- セクションカード ---- */
+        .section-card {
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: .6rem;
+            padding: .6rem .7rem;
+            margin-bottom: .65rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+        }
+        .section-card.dragging { opacity: .5; outline: 2px dashed #0d6efd; }
+        .section-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+            user-select: none;
+            font-size: 1.1rem;
+            line-height: 1;
+            padding: 0 .15rem;
+        }
+        .drag-handle:active { cursor: grabbing; }
+        .section-name {
+            flex: 1 1 auto;
+            border: 1px solid transparent;
+            background: transparent;
+            font-weight: 700;
+            color: #0d6efd;
+            border-radius: .4rem;
+            padding: .1rem .4rem;
+        }
+        .section-name:hover { background: #f1f5ff; }
+        .section-name:focus {
+            outline: none;
+            border-color: #0d6efd;
+            background: #fff;
+        }
+        .btn-del {
+            border: none;
+            background: transparent;
+            color: #c0c5cc;
+            font-size: 1.2rem;
+            line-height: 1;
+            padding: 0 .3rem;
+        }
+        .btn-del:hover { color: #dc3545; }
+
+        /* ---- セクション最小化（アコーディオン）トグル ---- */
+        .min-btn {
+            border: none;
+            background: transparent;
+            color: #9aa3ad;
+            font-size: .85rem;
+            line-height: 1;
+            padding: .1rem .4rem;
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .min-btn:hover { color: #0d6efd; }
+        /* card-header にトグルを置く際の整列 */
+        .card-header.collapsible-header { display: flex; align-items: center; }
+        .card-header.collapsible-header > .min-btn { margin-left: auto; }
+
+        .chord-area { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+        /* ---- 進捗の数値入力 ---- */
+        .pct-input {
+            width: 3.2rem;
+            text-align: right;
+            border: 1px solid transparent;
+            background: transparent;
+            border-radius: .3rem;
+            padding: 0 .2rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .pct-input:hover { background: #eef2f7; }
+        .pct-input:focus { outline: none; border-color: #0d6efd; background: #fff; }
+        /* 数値入力のスピナーを消す */
+        .pct-input::-webkit-outer-spin-button,
+        .pct-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .pct-input { -moz-appearance: textfield; }
+
+        /* ---- 保存トースト ---- */
+        .save-toast {
+            position: fixed;
+            bottom: 1.2rem; right: 1.2rem;
+            z-index: 2000;
+            min-width: 220px;
+            display: none;
+        }
+
+        /* ---- ダイアトニックコード（リファレンス） ---- */
+        .diatonic-panel { display: flex; flex-wrap: wrap; gap: .35rem; }
+        .diatonic-chip {
+            border: 1px solid #d7e3f5;
+            background: #f3f8ff;
+            border-radius: .5rem;
+            padding: .2rem .5rem;
+            min-width: 3.4rem;
+            text-align: center;
+            line-height: 1.25;
+        }
+        .diatonic-chip .deg { display: block; font-size: .66rem; color: #6c8cc7; font-weight: 700; }
+        .diatonic-chip .chord { display: block; font-weight: 700; color: #1b3a6b; }
+        .diatonic-empty { color: #9aa3ad; font-size: .85rem; }
+
+        /* ---- サークル・オブ・フィフス（五度圏） ---- */
+        .cof {
+            position: relative;
+            width: 240px; height: 240px;
+            max-width: 100%;
+            margin: .3rem auto 0;
+        }
+        .cof-key {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            width: 40px; height: 40px;
+            border: 1px solid #d7e3f5;
+            background: #fff;
+            border-radius: 50%;
+            font-size: .8rem; font-weight: 700;
+            color: #1b3a6b;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0; line-height: 1;
+            cursor: pointer;
+            transition: background .12s, color .12s, box-shadow .12s, border-color .12s;
+        }
+        .cof-key.minor {
+            width: 33px; height: 33px;
+            font-size: .7rem;
+            background: #f3f8ff;
+            color: #5a76a8;
+        }
+        .cof-key:hover { border-color: #0d6efd; background: #eaf1ff; z-index: 2; }
+        .cof-key.selected {
+            background: #0d6efd; color: #fff; border-color: #0d6efd;
+            box-shadow: 0 2px 10px rgba(13, 110, 253, .45);
+            z-index: 3;
+        }
+        .cof-center {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px; text-align: center;
+            font-size: .6rem; color: #c2cad4; font-weight: 700;
+            pointer-events: none; user-select: none;
+        }
+
+        /* ---- セクション個別 Key（転調） ---- */
+        .section-key {
+            flex: 0 0 auto;
+            width: 5.6rem;
+            font-size: .8rem;
+            padding: .1rem .45rem;
+            border: 1px solid #d7e3f5;
+            background: #f7faff;
+            border-radius: .4rem;
+            color: #1b3a6b;
+            font-weight: 700;
+        }
+        .section-key::placeholder { color: #9bb6d8; font-weight: 400; }
+        .section-key:focus { outline: none; border-color: #0d6efd; background: #fff; }
+
+        /* ---- Zen Mode（全画面） ---- */
+        html.zen, body.zen { overflow: hidden; height: 100%; }
+        body.zen .core-header,
+        body.zen .gutter { display: none !important; }
+        body.zen #split { padding: 0; min-height: 0; }
+        body.zen .panel:not(.zen-active) { display: none !important; }
+        /* 画面いっぱい（100%フルサイズ）に広げる */
+        .panel.zen-active {
+            position: fixed; inset: 0; z-index: 1500;
+            flex-basis: auto !important;
+            width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh;
+            margin: 0;
+            background: #fbfcfe;
+            padding: 4.2rem 1.6rem 1.4rem;
+            overflow: auto;
+            display: flex; flex-direction: column;
+        }
+        /* Zen 中はセクション本文を大きく使えるようにする */
+        body.zen .panel.zen-active .section-list { flex: 1 1 auto; }
+        body.zen .panel.zen-active .section-body { min-height: 9rem; }
+
+        /* フローティング基本情報（Zen 中のみ表示） */
+        #zen-float {
+            display: none;
+            position: fixed; top: .6rem; left: .9rem; right: 12rem; z-index: 1600;
+            background: rgba(255, 255, 255, .96);
+            border: 1px solid #e3e6ea; border-radius: .6rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+            padding: .4rem .8rem;
+            align-items: center; gap: 1rem; flex-wrap: wrap;
+        }
+        body.zen #zen-float { display: flex; }
+        #zen-float .zf-label { font-size: .68rem; color: #8a929b; font-weight: 700; margin-right: .25rem; }
+        #zen-float .zf-val { font-weight: 700; color: #1b3a6b; }
+        #zen-float .diatonic-panel { gap: .22rem; }
+        #zen-float .diatonic-chip { padding: .04rem .35rem; min-width: auto; }
+        #zen-float .diatonic-chip .deg { font-size: .58rem; }
+
+        /* 全画面を閉じるボタン：一回り大きく・目立つ右上固定 */
+        #zen-close {
+            position: fixed; top: .8rem; right: 1.1rem; z-index: 1700; display: none;
+            align-items: center; gap: .35rem;
+            font-size: 1.05rem; font-weight: 700;
+            padding: .55rem 1.3rem; border-radius: .6rem;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
+        }
+        body.zen #zen-close { display: inline-flex; }
+
+        #analysis-reopen { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 1700; display: none; }
+
+        /* コード全画面の 2分割（入力 ⇄ 理論解析） */
+        .chord-zen-wrap { display: block; }
+        body.zen .panel[data-panel="chord"].zen-active .chord-zen-wrap {
+            display: flex; gap: 0; align-items: stretch;
+            flex: 1 1 auto; min-height: 0;
+        }
+        .chord-edit { min-width: 0; }
+        body.zen .panel[data-panel="chord"].zen-active .chord-edit {
+            flex: 1 1 55%; overflow: auto; padding-right: .4rem; min-width: 12rem;
+        }
+        .chord-analysis { display: none; }
+        body.zen .panel[data-panel="chord"].zen-active .chord-analysis.open {
+            display: block; flex: 1 1 45%; min-width: 12rem;
+            border-left: 1px solid #e3e6ea; padding-left: 1.2rem;
+            overflow: auto;
+        }
+        /* コード全画面の 2画面リサイズ用ガター（入力 ⇄ 解析の境界線） */
+        .chord-gutter {
+            display: none;
+            flex: 0 0 12px;
+            cursor: col-resize;
+            align-self: stretch;
+            position: relative;
+        }
+        .chord-gutter.show { display: block; }
+        .chord-gutter::before {
+            content: "";
+            position: absolute;
+            top: 0; bottom: 0; left: 50%;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #d3d8de;
+            border-radius: 2px;
+        }
+        .chord-gutter:hover::before { background: #0d6efd; }
+        .analysis-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: .6rem;
+        }
+        .analysis-section { margin-bottom: 1rem; }
+        .analysis-section h4 { font-size: .8rem; color: #0d6efd; font-weight: 700; margin-bottom: .35rem; }
+        .degree-cards { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+        /* 改行同期：左の入力欄の各行に対応する1行ぶんの度数表示 */
+        .degree-lines { display: flex; flex-direction: column; gap: .35rem; }
+        .degree-line {
+            display: flex; flex-wrap: wrap; gap: .4rem;
+            align-items: center;
+            min-height: 2.1rem;
+        }
+        .degree-line.is-blank { min-height: 1.1rem; }
+        .degree-card {
+            border: 1px solid #e3e6ea; border-radius: .5rem;
+            padding: .3rem .55rem; text-align: center; min-width: 3.2rem; background: #fff;
+        }
+        .degree-card .chord { font-weight: 700; color: #1b3a6b; }
+        .degree-card .deg { font-size: .7rem; color: #6c8cc7; font-weight: 700; }
+        .degree-card.nondiatonic { background: #fff6f0; border-color: #f3d3bf; }
+        .degree-card.nondiatonic .deg { color: #c2772f; }
+
+        /* 解析側ヘッダーのセクション個別 Key バッジ */
+        .analysis-section h4 .sec-key-badge {
+            font-size: .66rem; font-weight: 700; color: #6c8cc7;
+            background: #eef4ff; border: 1px solid #d7e3f5;
+            border-radius: .35rem; padding: 0 .35rem; margin-left: .4rem;
+        }
+
+        /* ---- テンプレート選択ポップオーバー ---- */
+        .template-menu {
+            position: fixed;
+            z-index: 2100;
+            min-width: 240px; max-width: 340px;
+            max-height: 60vh; overflow: auto;
+            background: #fff;
+            border: 1px solid #d7dde4;
+            border-radius: .6rem;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, .16);
+            padding: .4rem;
+            display: none;
+        }
+        .template-menu.show { display: block; }
+        .template-menu .tm-title { font-size: .72rem; color: #8a929b; font-weight: 700; padding: .2rem .4rem .35rem; }
+        .template-menu .tm-row {
+            display: flex; align-items: center; gap: .2rem;
+            border-radius: .4rem; padding: .1rem .15rem;
+        }
+        .template-menu .tm-row:hover { background: #f6f9ff; }
+        .template-menu .tm-item {
+            flex: 1 1 auto;
+            display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+            text-align: left;
+            border: none; background: transparent;
+            border-radius: .4rem; padding: .4rem .5rem;
+        }
+        .template-menu .tm-item:hover { background: #eaf1ff; }
+        .template-menu .tm-item .tm-count { font-size: .7rem; color: #9aa3ad; white-space: nowrap; }
+        .template-menu .tm-actions { display: flex; gap: .1rem; flex: 0 0 auto; }
+        .template-menu .tm-act {
+            border: none; background: transparent; cursor: pointer;
+            font-size: .9rem; line-height: 1; padding: .25rem .3rem; border-radius: .35rem;
+            color: #8a929b;
+        }
+        .template-menu .tm-act:hover { background: #e7ecf3; }
+        .template-menu .tm-act[data-act="delete"]:hover { background: #fde8e8; }
+        .template-menu .tm-empty { color: #9aa3ad; font-size: .82rem; padding: .5rem; }
+    </style>
+</head>
+<body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})}">
+
+<!-- ===== スクロール追従ヘッダー（右上に一括保存ボタン） ===== -->
+<div class="core-header">
+    <div class="d-flex justify-content-between align-items-center px-3 py-2 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <a th:href="@{/songs}" class="btn btn-sm btn-outline-secondary">← 一覧</a>
+            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary">📅 カレンダー</a>
+            <h1 class="h5 mb-0">
+                🎼 <span th:text="${song.title}">曲名</span>
+                <span class="badge align-middle"
+                      th:classappend="${song.status.colorClass}"
+                      th:text="${song.status.label}">ステータス</span>
+            </h1>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span id="save-status" class="text-muted small"></span>
+            <button type="button" id="save-all" class="btn btn-primary">💾 変更を保存</button>
+            <span class="vr mx-1"></span>
+            <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary"
+               title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
+            <form th:action="@{/logout}" method="post" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">ログアウト</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- アップロード等のメッセージ -->
+<div th:if="${message}" class="alert alert-success py-2 mb-0 mx-3 mt-2" role="alert" th:text="${message}"></div>
+<div th:if="${error}" class="alert alert-danger py-2 mb-0 mx-3 mt-2" role="alert" th:text="${error}"></div>
+
+<!-- ===== 3エリア（リサイズ可能なスプリットビュー） ===== -->
+<div id="split">
+
+    <!-- 左：歌詞 -->
+    <section class="panel" data-panel="lyric">
+        <div class="area-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+            <h2 class="h6 mb-0">📝 歌詞</h2>
+            <div class="d-flex align-items-center gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary tpl-save-btn" data-area="lyric"
+                        title="現在の構成をテンプレートとして保存">💾 構成を保存</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary tpl-apply-btn" data-area="lyric"
+                        title="保存済みテンプレートを適用">📋 テンプレ適用</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="lyric"
+                        title="このエリアを全画面表示">🔍 全画面（Zen Mode）</button>
+            </div>
+        </div>
+        <div class="section-list" data-area="lyric">
+            <div class="section-card" th:each="sec : ${song.lyricSections}" th:attr="data-id=${sec.id}">
+                <div class="section-head">
+                    <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
+                    <input class="section-name" type="text" th:value="${sec.name}" placeholder="セクション名">
+                    <button type="button" class="btn-del" title="削除">×</button>
+                </div>
+                <textarea class="section-body form-control" rows="4"
+                          placeholder="歌詞を入力..." th:text="${sec.content}"></textarea>
+            </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary w-100 add-section" data-area="lyric">
+            ＋ セクション追加
+        </button>
+    </section>
+
+    <div class="gutter" data-gutter="0"></div>
+
+    <!-- 中央：コード -->
+    <section class="panel" data-panel="chord">
+        <div class="area-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+            <h2 class="h6 mb-0">🎹 コード進行</h2>
+            <div class="d-flex align-items-center gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary tpl-save-btn" data-area="chord"
+                        title="現在の構成をテンプレートとして保存">💾 構成を保存</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary tpl-apply-btn" data-area="chord"
+                        title="保存済みテンプレートを適用">📋 テンプレ適用</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="chord"
+                        title="全画面 + ディグリー解析">🔍 全画面（Zen Mode）</button>
+            </div>
+        </div>
+
+        <div class="chord-zen-wrap">
+            <!-- 入力側 -->
+            <div class="chord-edit">
+                <div class="section-list" data-area="chord">
+                    <div class="section-card" th:each="sec : ${song.chordSections}" th:attr="data-id=${sec.id}">
+                        <div class="section-head">
+                            <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
+                            <input class="section-name" type="text" th:value="${sec.name}" placeholder="セクション名">
+                            <input class="section-key" type="text" th:value="${sec.sectionKey}"
+                                   placeholder="Key" title="このセクションのKey（転調）。空なら曲全体のKeyを使用">
+                            <button type="button" class="btn-del" title="削除">×</button>
+                        </div>
+                        <textarea class="section-body chord-area form-control" rows="4"
+                                  placeholder="例: F - G - Em - Am" th:text="${sec.content}"></textarea>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100 add-section" data-area="chord">
+                    ＋ セクション追加
+                </button>
+            </div>
+
+            <!-- 入力 ⇄ 解析のリサイズ用ガター（コード全画面時のみ表示） -->
+            <div class="chord-gutter" id="chord-gutter"></div>
+
+            <!-- 解析側（コード全画面時のみ表示） -->
+            <aside class="chord-analysis" id="chord-analysis">
+                <div class="analysis-head">
+                    <h3 class="h6 mb-0">🧠 ディグリーネーム解析</h3>
+                    <button type="button" class="btn-close" id="analysis-close"
+                            title="解析を閉じる" aria-label="解析を閉じる"></button>
+                </div>
+                <div id="analysis-body"></div>
+            </aside>
+        </div>
+    </section>
+
+    <div class="gutter" data-gutter="1"></div>
+
+    <!-- 右：曲情報・世界観・進捗 -->
+    <aside class="panel" data-panel="info">
+
+        <!-- デモ音源 -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold py-2">🎧 デモ音源</div>
+            <div class="card-body">
+                <!-- 既存音源のプレイヤー -->
+                <div th:if="${song.audioFilePath != null}" class="mb-2">
+                    <audio controls class="w-100"
+                           th:src="@{/audio/{f}(f=${song.audioFilePath})}">
+                        お使いのブラウザは audio タグに対応していません。
+                    </audio>
+                </div>
+                <p th:if="${song.audioFilePath == null}" class="text-muted small mb-2">
+                    まだデモ音源がありません。MP3 / WAV などをアップロードしてください。
+                </p>
+
+                <!-- アップロードフォーム -->
+                <form th:action="@{/songs/{id}/audio(id=${song.id})}" method="post"
+                      enctype="multipart/form-data" class="input-group input-group-sm">
+                    <input type="file" name="audioFile" class="form-control"
+                           accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" required>
+                    <button type="submit" class="btn btn-outline-primary">
+                        <span th:text="${song.audioFilePath == null} ? '⬆ アップロード' : '⬆ 差し替え'">⬆ アップロード</span>
+                    </button>
+                </form>
+                <div class="form-text">最大 50MB</div>
+            </div>
+        </div>
+
+        <!-- BPM -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold py-2">🥁 BPM</div>
+            <div class="card-body">
+                <div class="input-group input-group-sm">
+                    <input type="number" id="bpm" class="form-control"
+                           min="0" max="400" th:value="${song.bpm}" placeholder="120">
+                    <span class="input-group-text">BPM</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key（サークル・オブ・フィフス）＆ ダイアトニック -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
+                <span>🎼 Key &amp; ダイアトニック</span>
+                <span class="badge bg-primary" id="cof-current">未選択</span>
+            </div>
+            <div class="card-body">
+                <!-- 五度圏（外＝メジャー / 内＝マイナー）。JSがボタンを配置する -->
+                <div id="cof" class="cof" role="group" aria-label="サークル・オブ・フィフス"></div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <small class="text-muted">外＝メジャー / 内＝相対マイナー</small>
+                    <button type="button" id="cof-clear" class="btn btn-sm btn-outline-secondary py-0">クリア</button>
+                </div>
+                <!-- 既存の保存ロジック互換のため Key 値は hidden で保持 -->
+                <input type="hidden" id="musicKey" th:value="${song.musicKey}">
+
+                <hr class="my-2">
+                <div class="small fw-bold text-muted mb-1">選択キーのダイアトニックコード</div>
+                <div id="diatonic-panel" class="diatonic-panel">
+                    <span class="diatonic-empty">Key を選ぶと表示されます。</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold py-2">🌌 世界観・コンセプト</div>
+            <div class="card-body">
+                <textarea id="worldViewMemo" class="form-control" rows="5"
+                          placeholder="曲の世界観・テーマ・参考曲など..."
+                          th:text="${song.worldViewMemo}"></textarea>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-bold py-2">📈 進捗率</div>
+            <div class="card-body">
+
+                <!-- 作詞 -->
+                <div class="metric mb-3" data-metric="lyric">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>作詞</span>
+                        <span>
+                            <input type="number" class="pct-input" id="lyricProgress"
+                                   min="0" max="100" th:value="${song.lyricProgress}"
+                                   title="クリックして数値を直接入力できます">%
+                        </span>
+                    </div>
+                    <div class="progress mb-1" style="height: 8px;">
+                        <div class="progress-bar bg-info" id="lyricBar"
+                             th:style="'width:' + ${song.lyricProgress} + '%'"></div>
+                    </div>
+                    <input type="range" class="form-range pct-range" data-for="lyricProgress"
+                           min="0" max="100" step="5" th:value="${song.lyricProgress}">
+                </div>
+
+                <!-- メロディ -->
+                <div class="metric mb-3" data-metric="melody">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>メロディ</span>
+                        <span>
+                            <input type="number" class="pct-input" id="melodyProgress"
+                                   min="0" max="100" th:value="${song.melodyProgress}"
+                                   title="クリックして数値を直接入力できます">%
+                        </span>
+                    </div>
+                    <div class="progress mb-1" style="height: 8px;">
+                        <div class="progress-bar bg-primary" id="melodyBar"
+                             th:style="'width:' + ${song.melodyProgress} + '%'"></div>
+                    </div>
+                    <input type="range" class="form-range pct-range" data-for="melodyProgress"
+                           min="0" max="100" step="5" th:value="${song.melodyProgress}">
+                </div>
+
+                <!-- 編曲 -->
+                <div class="metric mb-3" data-metric="arrangement">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>編曲</span>
+                        <span>
+                            <input type="number" class="pct-input" id="arrangementProgress"
+                                   min="0" max="100" th:value="${song.arrangementProgress}"
+                                   title="クリックして数値を直接入力できます">%
+                        </span>
+                    </div>
+                    <div class="progress mb-1" style="height: 8px;">
+                        <div class="progress-bar bg-success" id="arrangementBar"
+                             th:style="'width:' + ${song.arrangementProgress} + '%'"></div>
+                    </div>
+                    <input type="range" class="form-range pct-range" data-for="arrangementProgress"
+                           min="0" max="100" step="5" th:value="${song.arrangementProgress}">
+                </div>
+
+                <hr>
+
+                <!-- 全体 -->
+                <div class="d-flex justify-content-between small fw-bold mb-1">
+                    <span>全体</span>
+                    <span><span id="overallVal" th:text="${song.overallProgress}">0</span>%</span>
+                </div>
+                <div class="progress" style="height: 12px;">
+                    <div class="progress-bar bg-warning text-dark" id="overallBar"
+                         th:style="'width:' + ${song.overallProgress} + '%'"></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<!-- Zen Mode：フローティング基本情報（常に BPM/Key/ダイアトニックを確認できる） -->
+<div id="zen-float">
+    <span><span class="zf-label">BPM</span><span class="zf-val" id="zen-bpm">—</span></span>
+    <span><span class="zf-label">KEY</span><span class="zf-val" id="zen-key">—</span></span>
+    <span class="d-flex align-items-center">
+        <span class="zf-label">DIATONIC</span>
+        <span id="zen-diatonic" class="diatonic-panel"></span>
+    </span>
+</div>
+
+<!-- Zen Mode：閉じるボタン（一回り大きく・右上固定） -->
+<button type="button" id="zen-close" class="btn btn-dark shadow">✕ 全画面を閉じる（Esc）</button>
+
+<!-- コード解析を閉じた後に再表示するボタン -->
+<button type="button" id="analysis-reopen" class="btn btn-primary btn-sm shadow">🧠 ディグリー解析を開く</button>
+
+<!-- 新規セクション用テンプレート -->
+<template id="section-template">
+    <div class="section-card" data-id="">
+        <div class="section-head">
+            <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
+            <input class="section-name" type="text" placeholder="セクション名">
+            <button type="button" class="btn-del" title="削除">×</button>
+        </div>
+        <textarea class="section-body form-control" rows="4" placeholder="入力..."></textarea>
+    </div>
+</template>
+
+<!-- 保存トースト -->
+<div class="alert alert-success save-toast shadow" id="save-toast" role="alert">保存しました</div>
+
+<script th:inline="javascript">
+    const SAVE_URL = document.body.getAttribute('data-save-url');
+    const STORAGE_KEY = 'mt-split-sizes';
+
+    /* =========================================================
+       1) セクションのドラッグ&ドロップ並び替え
+       ========================================================= */
+    let dragEl = null;
+
+    function setupCard(card) {
+        const handle = card.querySelector('.drag-handle');
+        // ドラッグはハンドルからのみ開始（テキスト編集を邪魔しない）
+        handle.addEventListener('mousedown', () => card.setAttribute('draggable', 'true'));
+        handle.addEventListener('mouseup', () => card.removeAttribute('draggable'));
+        card.addEventListener('dragstart', (e) => {
+            dragEl = card;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            card.removeAttribute('draggable');
+            dragEl = null;
+        });
+        // 削除ボタン
+        card.querySelector('.btn-del').addEventListener('click', () => {
+            if (confirm('このセクションを削除しますか？（保存時に反映されます）')) {
+                card.remove();
+            }
+        });
+    }
+
+    function getDragAfterElement(list, y) {
+        const cards = [...list.querySelectorAll('.section-card:not(.dragging)')];
+        return cards.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            }
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    document.querySelectorAll('.section-list').forEach((list) => {
+        list.addEventListener('dragover', (e) => {
+            // 同じエリア内でのみ並び替え可能
+            if (!dragEl || dragEl.closest('.section-list') !== list) return;
+            e.preventDefault();
+            const after = getDragAfterElement(list, e.clientY);
+            if (after == null) {
+                list.appendChild(dragEl);
+            } else {
+                list.insertBefore(dragEl, after);
+            }
+        });
+        list.addEventListener('drop', (e) => e.preventDefault());
+    });
+
+    // 既存カードを初期化
+    document.querySelectorAll('.section-card').forEach(setupCard);
+
+    /* =========================================================
+       2) セクション追加／カード生成
+       ========================================================= */
+    const template = document.getElementById('section-template');
+
+    // カードを1枚生成して返す。コードエリアではセクション個別 Key 入力も付与する。
+    // data = { name, content, sectionKey } で初期値を流し込める（テンプレ適用に使用）。
+    function buildCard(area, data) {
+        data = data || {};
+        const node = template.content.firstElementChild.cloneNode(true);
+        const nameInput = node.querySelector('.section-name');
+        const body = node.querySelector('.section-body');
+        nameInput.value = data.name || '';
+        body.value = data.content || '';
+        if (area === 'chord') {
+            body.classList.add('chord-area');
+            body.placeholder = '例: F - G - Em - Am';
+            // セクション個別 Key（転調用）の入力欄を名前の右に差し込む
+            const keyInput = document.createElement('input');
+            keyInput.type = 'text';
+            keyInput.className = 'section-key';
+            keyInput.placeholder = 'Key';
+            keyInput.title = 'このセクションのKey（転調）。空なら曲全体のKeyを使用';
+            keyInput.value = data.sectionKey || '';
+            nameInput.insertAdjacentElement('afterend', keyInput);
+        } else {
+            body.placeholder = '歌詞を入力...';
+        }
+        setupCard(node);
+        return node;
+    }
+
+    function getSectionList(area) {
+        return document.querySelector('.section-list[data-area="' + area + '"]');
+    }
+
+    document.querySelectorAll('.add-section').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const area = btn.getAttribute('data-area');
+            const node = buildCard(area, {});
+            getSectionList(area).appendChild(node);
+            node.querySelector('.section-name').focus();
+        });
+    });
+
+    /* =========================================================
+       3) 進捗（数値入力・スライダー・バーの連動）
+       ========================================================= */
+    function clampPct(v) {
+        if (isNaN(v)) return 0;
+        return Math.max(0, Math.min(100, Math.round(v)));
+    }
+
+    function bindMetric(numId, barId) {
+        const num = document.getElementById(numId);
+        const bar = document.getElementById(barId);
+        const range = document.querySelector('.pct-range[data-for="' + numId + '"]');
+
+        function apply(value, source) {
+            const v = clampPct(value);
+            if (source !== 'num') num.value = v;
+            if (source !== 'range') range.value = v;
+            bar.style.width = v + '%';
+            updateOverall();
+        }
+        num.addEventListener('input', () => apply(parseInt(num.value, 10), 'num'));
+        num.addEventListener('blur', () => apply(parseInt(num.value, 10), 'blur'));
+        range.addEventListener('input', () => apply(parseInt(range.value, 10), 'range'));
+    }
+
+    function updateOverall() {
+        const l = clampPct(parseInt(document.getElementById('lyricProgress').value, 10));
+        const m = clampPct(parseInt(document.getElementById('melodyProgress').value, 10));
+        const a = clampPct(parseInt(document.getElementById('arrangementProgress').value, 10));
+        const overall = Math.round((l + m + a) / 3);
+        document.getElementById('overallVal').textContent = overall;
+        document.getElementById('overallBar').style.width = overall + '%';
+    }
+
+    bindMetric('lyricProgress', 'lyricBar');
+    bindMetric('melodyProgress', 'melodyBar');
+    bindMetric('arrangementProgress', 'arrangementBar');
+
+    /* =========================================================
+       4) 3エリアのリサイズ（スプリットビュー）
+       ========================================================= */
+    const split = document.getElementById('split');
+    const panels = [...split.querySelectorAll('.panel')];
+
+    function saveSizes() {
+        const sizes = panels.map((p) => p.style.flexBasis || '');
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(sizes));
+    }
+
+    function restoreSizes() {
+        try {
+            const sizes = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            if (Array.isArray(sizes) && sizes.length === panels.length) {
+                panels.forEach((p, i) => { if (sizes[i]) p.style.flexBasis = sizes[i]; });
+            }
+        } catch (e) { /* 無視 */ }
+    }
+
+    document.querySelectorAll('.gutter').forEach((gutter) => {
+        gutter.addEventListener('mousedown', (e) => {
+            // 横並び（デスクトップ）以外は無効
+            if (window.innerWidth <= 991.98) return;
+            e.preventDefault();
+            const left = gutter.previousElementSibling;
+            const right = gutter.nextElementSibling;
+            const startX = e.clientX;
+            const leftStart = left.getBoundingClientRect().width;
+            const rightStart = right.getBoundingClientRect().width;
+            const MIN = 160;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            function onMove(ev) {
+                let delta = ev.clientX - startX;
+                if (leftStart + delta < MIN) delta = MIN - leftStart;
+                if (rightStart - delta < MIN) delta = rightStart - MIN;
+                left.style.flexBasis = (leftStart + delta) + 'px';
+                right.style.flexBasis = (rightStart - delta) + 'px';
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                saveSizes();
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    });
+
+    restoreSizes();
+
+    /* =========================================================
+       5) 一括保存（変更を保存）
+       ========================================================= */
+    function numOrNull(id) {
+        const v = document.getElementById(id).value.trim();
+        return v === '' ? null : parseInt(v, 10);
+    }
+
+    function collectSections(area) {
+        const list = getSectionList(area);
+        return [...list.querySelectorAll('.section-card')].map((card) => {
+            const keyEl = card.querySelector('.section-key');
+            return {
+                id: card.dataset.id ? parseInt(card.dataset.id, 10) : null,
+                name: card.querySelector('.section-name').value,
+                content: card.querySelector('.section-body').value,
+                sectionKey: keyEl ? keyEl.value : null
+            };
+        });
+    }
+
+    function gather() {
+        return {
+            bpm: numOrNull('bpm'),
+            musicKey: document.getElementById('musicKey').value,
+            worldViewMemo: document.getElementById('worldViewMemo').value,
+            lyricProgress: clampPct(parseInt(document.getElementById('lyricProgress').value, 10)),
+            melodyProgress: clampPct(parseInt(document.getElementById('melodyProgress').value, 10)),
+            arrangementProgress: clampPct(parseInt(document.getElementById('arrangementProgress').value, 10)),
+            lyricSections: collectSections('lyric'),
+            chordSections: collectSections('chord')
+        };
+    }
+
+    const saveBtn = document.getElementById('save-all');
+    const saveStatus = document.getElementById('save-status');
+
+    saveBtn.addEventListener('click', () => {
+        saveBtn.disabled = true;
+        saveStatus.textContent = '保存中...';
+        fetch(SAVE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(gather())
+        }).then((res) => {
+            if (!res.ok) throw new Error('save failed');
+            return res.json();
+        }).then(() => {
+            // 新しく採番されたID等を反映するためリロード（リサイズ幅は localStorage で維持）
+            sessionStorage.setItem('mt-saved', '1');
+            location.reload();
+        }).catch(() => {
+            saveBtn.disabled = false;
+            saveStatus.textContent = '';
+            alert('保存に失敗しました。通信状況を確認してください。');
+        });
+    });
+
+    // Ctrl/Cmd + S でも保存
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            saveBtn.click();
+        }
+    });
+
+    // 保存後トースト
+    if (sessionStorage.getItem('mt-saved')) {
+        sessionStorage.removeItem('mt-saved');
+        const toast = document.getElementById('save-toast');
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 2200);
+    }
+
+    /* =========================================================
+       6) 音楽理論エンジン（フロントエンドのみ・遅延なし）
+       ========================================================= */
+    const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const FLAT_NAMES  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+    const NAME_TO_PC = {
+        'C': 0, 'B#': 0, 'C#': 1, 'DB': 1, 'D': 2, 'D#': 3, 'EB': 3, 'E': 4, 'FB': 4,
+        'F': 5, 'E#': 5, 'F#': 6, 'GB': 6, 'G': 7, 'G#': 8, 'AB': 8, 'A': 9, 'A#': 10, 'BB': 10, 'B': 11, 'CB': 11
+    };
+    // メジャー／ナチュラルマイナーのスケール構成音（半音）と三和音の性質・度数表記
+    const MAJOR = {
+        steps: [0, 2, 4, 5, 7, 9, 11],
+        quality: ['', 'm', 'm', '', '', 'm', 'dim'],
+        degree: ['I', 'IIm', 'IIIm', 'IV', 'V', 'VIm', 'VIIdim']
+    };
+    const MINOR = {
+        steps: [0, 2, 3, 5, 7, 8, 10],
+        quality: ['m', 'dim', '', 'm', 'm', '', ''],
+        degree: ['Im', 'IIdim', 'III', 'IVm', 'Vm', 'VI', 'VII']
+    };
+    // Key 起点からの半音間隔 → ローマ数字（非ダイアトニックも表現）
+    const INTERVAL_ROMAN = ['I', 'bII', 'II', 'bIII', 'III', 'IV', '#IV', 'V', 'bVI', 'VI', 'bVII', 'VII'];
+
+    function normalizeRoot(letter, accidental) {
+        const acc = accidental === '♯' ? '#' : accidental === '♭' ? 'b' : (accidental || '');
+        return letter.toUpperCase() + acc;
+    }
+
+    // "C Major" / "Am" / "F#m" / "D Minor" などを {root, minor} に解析
+    function parseKey(str) {
+        if (!str) return null;
+        const m = str.trim().match(/^([A-Ga-g])([#b♯♭]?)\s*(.*)$/);
+        if (!m) return null;
+        const root = normalizeRoot(m[1], m[2]);
+        if (!(root.toUpperCase() in NAME_TO_PC)) return null;
+        const rest = m[3].toLowerCase().replace(/\s+/g, '');
+        let minor = false;
+        if (rest === '' || rest.startsWith('maj')) minor = false;
+        else if (rest.startsWith('min') || rest === 'm' || rest.startsWith('m')) minor = true;
+        return { root: root, minor: minor };
+    }
+
+    function pcOf(root) {
+        return NAME_TO_PC[root.toUpperCase()];
+    }
+
+    function noteName(pc, useFlat) {
+        return (useFlat ? FLAT_NAMES : SHARP_NAMES)[((pc % 12) + 12) % 12];
+    }
+
+    // Key のダイアトニックコード一覧を返す [{deg, chord}]
+    function diatonicChords(key) {
+        const pc = pcOf(key.root);
+        const flatKeys = key.minor
+            ? ['D', 'G', 'C', 'F', 'Bb', 'Eb', 'Ab']
+            : ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb'];
+        const useFlat = key.root.includes('b') || flatKeys.includes(key.root);
+        const t = key.minor ? MINOR : MAJOR;
+        return t.steps.map((s, i) => ({
+            deg: t.degree[i],
+            chord: noteName(pc + s, useFlat) + t.quality[i]
+        }));
+    }
+
+    // テキストからコードトークンを抽出
+    function extractChords(text) {
+        if (!text) return [];
+        const re = /[A-Ga-g][#b♯♭]?(?:maj7|maj9|maj|min|m7|m9|m6|m|dim7|dim|aug|sus2|sus4|sus|add\d+|°|\+|6|7|9|11|13|\/[A-Ga-g][#b]?)*/g;
+        return (text.match(re) || []).map((s) => s.trim()).filter(Boolean);
+    }
+
+    // 1つのコードを度数に解析
+    function analyzeChord(token, key) {
+        const m = token.match(/^([A-Ga-g])([#b♯♭]?)(.*)$/);
+        if (!m) return null;
+        const root = normalizeRoot(m[1], m[2]);
+        if (!(root.toUpperCase() in NAME_TO_PC)) return null;
+        let rest = m[3];
+        // スラッシュコードの分母は除去して三和音性質だけ見る
+        rest = rest.split('/')[0];
+        const lower = rest.toLowerCase();
+        let suffix = '';
+        if (lower.startsWith('maj')) suffix = '';
+        else if (lower.startsWith('dim') || rest.includes('°')) suffix = 'dim';
+        else if (lower.startsWith('aug') || rest.includes('+')) suffix = 'aug';
+        else if (lower.startsWith('m') && !lower.startsWith('maj')) suffix = 'm';
+
+        const interval = ((pcOf(root) - pcOf(key.root)) % 12 + 12) % 12;
+        const roman = INTERVAL_ROMAN[interval];
+        const diatonic = !roman.includes('b') && !roman.includes('#');
+        return { chord: token, degree: roman + suffix, diatonic: diatonic };
+    }
+
+    function renderDiatonicInto(el, key) {
+        if (!key) {
+            el.innerHTML = '<span class="diatonic-empty">Key を設定すると表示されます。</span>';
+            return;
+        }
+        el.innerHTML = diatonicChords(key).map((d) =>
+            '<span class="diatonic-chip"><span class="deg">' + d.deg
+            + '</span><span class="chord">' + d.chord + '</span></span>'
+        ).join('');
+    }
+
+    // 1コードを度数カードHTMLに変換（sectionKey が null のときは「Key未設定」表示）
+    function chordCardHtml(token, sectionKey) {
+        if (!sectionKey) {
+            return '<span class="degree-card"><span class="chord">' + escapeHtml(token)
+                + '</span><span class="deg">Key未設定</span></span>';
+        }
+        const a = analyzeChord(token, sectionKey);
+        if (!a) return '';
+        return '<span class="degree-card ' + (a.diatonic ? '' : 'nondiatonic') + '">'
+            + '<span class="chord">' + escapeHtml(a.chord) + '</span>'
+            + '<span class="deg">' + a.degree + '</span></span>';
+    }
+
+    // コード解析パネルの再描画。
+    // 各セクションは「個別 Key（転調）」があればそれを優先し、無ければ曲全体の Key を使う。
+    // 左のコード入力欄と「行数・改行位置」を一致させるため、1行ずつ対応させて出力する。
+    function renderAnalysis() {
+        const body = document.getElementById('analysis-body');
+        const songKey = parseKey(musicKeyInput.value);
+        const sections = [...document.querySelectorAll('.section-list[data-area="chord"] .section-card')];
+        let html = '';
+        sections.forEach((card) => {
+            const name = card.querySelector('.section-name').value || '無題';
+            const text = card.querySelector('.section-body').value || '';
+            // セクションにコードが1つも無ければ表示しない
+            if (!extractChords(text).length) return;
+            const keyEl = card.querySelector('.section-key');
+            const secKeyStr = keyEl ? keyEl.value.trim() : '';
+            const sectionKey = parseKey(secKeyStr) || songKey;
+            // 個別 Key が設定されている場合はバッジで明示（転調が一目で分かる）
+            const keyBadge = secKeyStr
+                ? '<span class="sec-key-badge">🎵 ' + escapeHtml(secKeyStr) + '</span>'
+                : '';
+            // 入力欄の改行で分割し、1行 = 1つの degree-line として描画
+            const linesHtml = text.split('\n').map((line) => {
+                const chords = extractChords(line);
+                if (!chords.length) {
+                    // 空行（またはコードなし行）も1行ぶんの高さを確保して位置を合わせる
+                    return '<div class="degree-line is-blank">&nbsp;</div>';
+                }
+                const cards = chords.map((c) => chordCardHtml(c, sectionKey)).join('');
+                return '<div class="degree-line">' + cards + '</div>';
+            }).join('');
+            html += '<div class="analysis-section"><h4>' + escapeHtml(name) + keyBadge + '</h4>'
+                + '<div class="degree-lines">' + linesHtml + '</div></div>';
+        });
+        body.innerHTML = html || '<p class="diatonic-empty">コードを入力すると度数が表示されます。</p>';
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Key/BPM 変更時にすべての理論表示を更新
+    const musicKeyInput = document.getElementById('musicKey');
+    const bpmInput = document.getElementById('bpm');
+    const cofCurrent = document.getElementById('cof-current');
+
+    function updateTheory() {
+        const key = parseKey(musicKeyInput.value);
+        renderDiatonicInto(document.getElementById('diatonic-panel'), key);
+        renderDiatonicInto(document.getElementById('zen-diatonic'), key);
+        const label = musicKeyInput.value.trim();
+        document.getElementById('zen-key').textContent = label || '—';
+        document.getElementById('zen-bpm').textContent = bpmInput.value.trim() || '—';
+        if (cofCurrent) cofCurrent.textContent = label || '未選択';
+        highlightCof();
+        if (document.getElementById('chord-analysis').classList.contains('open')) {
+            renderAnalysis();
+        }
+    }
+
+    /* ---- サークル・オブ・フィフス（五度圏）UI ---- */
+    // 時計回りの配置（上＝C）。外周＝メジャー、内周＝相対マイナー。
+    const COF_MAJOR = ['C', 'G', 'D', 'A', 'E', 'B', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F'];
+    const COF_MINOR = ['Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
+    const cofEl = document.getElementById('cof');
+    const cofButtons = [];
+
+    function buildCircleOfFifths() {
+        if (!cofEl) return;
+        const size = 240, c = size / 2, rMajor = 96, rMinor = 56;
+        const frag = document.createDocumentFragment();
+
+        function place(label, value, radius, isMinor, i) {
+            const angle = (i * 30) * Math.PI / 180; // 0=上、時計回り
+            const x = c + radius * Math.sin(angle);
+            const y = c - radius * Math.cos(angle);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'cof-key' + (isMinor ? ' minor' : '');
+            btn.textContent = label;
+            btn.dataset.key = value;
+            btn.title = value + (isMinor ? '（マイナー）' : '（メジャー）');
+            btn.style.left = x + 'px';
+            btn.style.top = y + 'px';
+            btn.addEventListener('click', () => selectKey(value));
+            frag.appendChild(btn);
+            cofButtons.push(btn);
+        }
+
+        COF_MAJOR.forEach((k, i) => place(k, k, rMajor, false, i));
+        COF_MINOR.forEach((k, i) => place(k, k, rMinor, true, i));
+
+        const center = document.createElement('div');
+        center.className = 'cof-center';
+        center.textContent = '五度圏';
+        cofEl.appendChild(frag);
+        cofEl.appendChild(center);
+    }
+
+    // ボタンクリックでKeyを選択（同じKeyの再クリックで解除）
+    function selectKey(value) {
+        musicKeyInput.value = (musicKeyInput.value.trim() === value) ? '' : value;
+        updateTheory();
+    }
+
+    // 現在のKeyに一致するボタンを選択表示（異名同音も一致させる）
+    function highlightCof() {
+        const cur = parseKey(musicKeyInput.value);
+        cofButtons.forEach((btn) => {
+            const bk = parseKey(btn.dataset.key);
+            const match = cur && bk && cur.minor === bk.minor && pcOf(cur.root) === pcOf(bk.root);
+            btn.classList.toggle('selected', !!match);
+        });
+    }
+
+    buildCircleOfFifths();
+    const cofClear = document.getElementById('cof-clear');
+    if (cofClear) {
+        cofClear.addEventListener('click', () => { musicKeyInput.value = ''; updateTheory(); });
+    }
+    bpmInput.addEventListener('input', updateTheory);
+
+    const chordEdit = document.querySelector('.chord-edit');
+
+    // コード入力・セクション名・セクション個別 Key のリアルタイム解析
+    // （動的追加カードにも効くようイベント委譲）
+    chordEdit.addEventListener('input', (e) => {
+        if (e.target.classList.contains('section-body')
+            || e.target.classList.contains('section-name')
+            || e.target.classList.contains('section-key')) {
+            if (document.getElementById('chord-analysis').classList.contains('open')) {
+                renderAnalysis();
+            }
+        }
+    });
+
+    /* ---- コード入力のハイフン自動補完（"F" → space → "F - "）----
+       快適性優先：直前がコード文字のときだけ " - " を挟む。
+       バックスペースや既存の区切り（- / 空白）は一切妨げない。 */
+    chordEdit.addEventListener('keydown', (e) => {
+        if (e.key !== ' ' && e.key !== 'Spacebar') return;
+        const ta = e.target;
+        if (!ta.classList || !ta.classList.contains('section-body')) return;
+        // 範囲選択中・IME変換中は介入しない
+        if (ta.selectionStart !== ta.selectionEnd) return;
+        if (e.isComposing) return;
+        const pos = ta.selectionStart;
+        const before = ta.value.slice(0, pos);
+        // 直前がコードを構成しうる文字（英数・#・b・♯・♭・)）のときだけ補完
+        if (!/[A-Za-z0-9#b♯♭)]$/.test(before)) return;
+        e.preventDefault();
+        const after = ta.value.slice(pos);
+        const insert = ' - ';
+        ta.value = before + insert + after;
+        const caret = pos + insert.length;
+        ta.selectionStart = ta.selectionEnd = caret;
+        // value をスクリプトで書き換えると input が発火しないため明示的に再解析
+        if (document.getElementById('chord-analysis').classList.contains('open')) {
+            renderAnalysis();
+        }
+    });
+
+    updateTheory();
+
+    /* =========================================================
+       7) Zen Mode（全画面）
+       ========================================================= */
+    const analysisPane = document.getElementById('chord-analysis');
+    const analysisReopen = document.getElementById('analysis-reopen');
+    const chordGutter = document.getElementById('chord-gutter');
+
+    function enterZen(area) {
+        const panel = document.querySelector('.panel[data-panel="' + area + '"]');
+        if (!panel) return;
+        document.body.classList.add('zen', 'zen-' + area);
+        panel.classList.add('zen-active');
+        if (area === 'chord') {
+            openAnalysis();
+        }
+        updateTheory();
+    }
+
+    function exitZen() {
+        document.querySelectorAll('.panel.zen-active').forEach((p) => p.classList.remove('zen-active'));
+        document.body.classList.remove('zen', 'zen-lyric', 'zen-chord');
+        analysisReopen.style.display = 'none';
+        chordGutter.classList.remove('show');
+        // リサイズで付けたインライン幅をリセットし、次回はデフォルト比率に戻す
+        chordEdit.style.flexBasis = '';
+        chordEdit.style.flexGrow = '';
+        analysisPane.style.flexBasis = '';
+        analysisPane.style.flexGrow = '';
+    }
+
+    function openAnalysis() {
+        analysisPane.classList.add('open');
+        analysisReopen.style.display = 'none';
+        // コード Zen 中のみリサイズ用ガターを表示
+        if (document.body.classList.contains('zen-chord')) {
+            chordGutter.classList.add('show');
+        }
+        renderAnalysis();
+    }
+
+    function closeAnalysis() {
+        analysisPane.classList.remove('open');
+        chordGutter.classList.remove('show');
+        // コード Zen 中だけ「再表示」ボタンを出す
+        if (document.body.classList.contains('zen-chord')) {
+            analysisReopen.style.display = 'inline-flex';
+        }
+    }
+
+    document.querySelectorAll('.zen-btn').forEach((btn) => {
+        btn.addEventListener('click', () => enterZen(btn.getAttribute('data-area')));
+    });
+    document.getElementById('zen-close').addEventListener('click', exitZen);
+    document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
+    analysisReopen.addEventListener('click', openAnalysis);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('zen')) {
+            // テキスト編集中でも全画面解除を優先
+            exitZen();
+        }
+    });
+
+    /* ---- コード全画面の 2画面リサイズ（入力 ⇄ ディグリー解析） ---- */
+    chordGutter.addEventListener('mousedown', (e) => {
+        if (!analysisPane.classList.contains('open')) return;
+        e.preventDefault();
+        const startX = e.clientX;
+        const editStart = chordEdit.getBoundingClientRect().width;
+        const anaStart = analysisPane.getBoundingClientRect().width;
+        const MIN = 180;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        function onMove(ev) {
+            let delta = ev.clientX - startX;
+            if (editStart + delta < MIN) delta = MIN - editStart;
+            if (anaStart - delta < MIN) delta = anaStart - MIN;
+            chordEdit.style.flexGrow = '0';
+            chordEdit.style.flexBasis = (editStart + delta) + 'px';
+            analysisPane.style.flexGrow = '0';
+            analysisPane.style.flexBasis = (anaStart - delta) + 'px';
+        }
+        function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+
+    /* =========================================================
+       8) セクション構成テンプレート（保存・適用・名前変更・上書き・削除）
+       ========================================================= */
+    const AREA_LABEL = { lyric: '歌詞', chord: 'コード' };
+
+    // テンプレ一覧ポップオーバー（1つを使い回す）
+    const tplMenu = document.createElement('div');
+    tplMenu.className = 'template-menu';
+    document.body.appendChild(tplMenu);
+
+    // 現在開いているメニューの対象（再描画に使う）
+    let tplMenuArea = null;
+    let tplMenuAnchor = null;
+
+    function hideTplMenu() {
+        tplMenu.classList.remove('show');
+        tplMenuArea = null;
+        tplMenuAnchor = null;
+    }
+
+    // メニュー外クリックで閉じる（適用ボタン自身のクリックは除く）
+    document.addEventListener('click', (e) => {
+        if (!tplMenu.classList.contains('show')) return;
+        if (tplMenu.contains(e.target)) return;
+        if (e.target.closest && e.target.closest('.tpl-apply-btn')) return;
+        hideTplMenu();
+    });
+
+    // 「構成を保存」：現在のそのエリアのブロック構成を新規テンプレートとして保存
+    document.querySelectorAll('.tpl-save-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const area = btn.getAttribute('data-area');
+            const sections = collectSections(area);
+            if (!sections.length) {
+                alert('保存できるブロックがありません。');
+                return;
+            }
+            const name = prompt(AREA_LABEL[area] + '構成のテンプレート名を入力してください\n（例: 王道ポップス構成）');
+            if (name === null) return;
+            if (!name.trim()) {
+                alert('テンプレート名を入力してください。');
+                return;
+            }
+            postJson('/templates', {
+                name: name.trim(),
+                type: area.toUpperCase(),
+                sections: sections
+            }).then((data) => {
+                if (data && data.error) { alert(data.error); return; }
+                showToast('テンプレート「' + (data.name || name.trim()) + '」を保存しました');
+            }).catch(() => alert('テンプレートの保存に失敗しました。'));
+        });
+    });
+
+    // 「テンプレ適用」：保存済みテンプレ一覧をポップオーバーで表示
+    document.querySelectorAll('.tpl-apply-btn').forEach((btn) => {
+        btn.addEventListener('click', () => openTplMenu(btn, btn.getAttribute('data-area')));
+    });
+
+    // 一覧を取得してメニューを描画（rename/overwrite/delete 後の再描画にも使う）
+    function openTplMenu(anchorBtn, area) {
+        tplMenuArea = area;
+        tplMenuAnchor = anchorBtn;
+        fetch('/templates?type=' + area.toUpperCase())
+            .then((res) => {
+                if (!res.ok) throw new Error('list failed');
+                return res.json();
+            })
+            .then((list) => renderTplMenu(list))
+            .catch(() => alert('テンプレートの取得に失敗しました。'));
+    }
+
+    function renderTplMenu(list) {
+        const area = tplMenuArea;
+        let html = '<div class="tm-title">' + AREA_LABEL[area] + '構成テンプレート</div>';
+        if (!list.length) {
+            html += '<div class="tm-empty">保存済みテンプレートはありません。<br>「構成を保存」から作成できます。</div>';
+        } else {
+            html += list.map((t) =>
+                '<div class="tm-row" data-id="' + t.id + '" data-name="' + escapeHtml(t.name) + '">'
+                + '<button type="button" class="tm-item" data-act="apply">'
+                + '<span>' + escapeHtml(t.name) + '</span>'
+                + '<span class="tm-count">' + t.count + 'ブロック</span></button>'
+                + '<span class="tm-actions">'
+                + '<button type="button" class="tm-act" data-act="rename" title="名前を変更">✏️</button>'
+                + '<button type="button" class="tm-act" data-act="overwrite" title="現在の構成で上書き保存">⬆️</button>'
+                + '<button type="button" class="tm-act" data-act="delete" title="削除">🗑️</button>'
+                + '</span></div>'
+            ).join('');
+        }
+        tplMenu.innerHTML = html;
+        // アンカー（適用ボタン）の真下に配置。画面右端からはみ出さないよう調整
+        const rect = tplMenuAnchor.getBoundingClientRect();
+        tplMenu.classList.add('show');
+        const menuWidth = tplMenu.offsetWidth;
+        let left = rect.left;
+        if (left + menuWidth > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - menuWidth - 8);
+        }
+        tplMenu.style.left = left + 'px';
+        tplMenu.style.top = (rect.bottom + 6) + 'px';
+    }
+
+    // メニュー内のクリックをまとめて処理（イベント委譲）
+    tplMenu.addEventListener('click', (e) => {
+        const actBtn = e.target.closest('[data-act]');
+        if (!actBtn) return;
+        const row = actBtn.closest('.tm-row');
+        if (!row) return;
+        const id = row.getAttribute('data-id');
+        const name = row.getAttribute('data-name');
+        const act = actBtn.getAttribute('data-act');
+        const area = tplMenuArea;
+
+        if (act === 'apply') {
+            hideTplMenu();
+            applyTemplateById(area, id);
+        } else if (act === 'rename') {
+            const newName = prompt('テンプレート名を変更します', name);
+            if (newName === null || !newName.trim()) return;
+            postJson('/templates/' + id + '/rename', { name: newName.trim() })
+                .then((data) => {
+                    if (data && data.error) { alert(data.error); return; }
+                    showToast('名前を変更しました');
+                    openTplMenu(tplMenuAnchor, area);
+                }).catch(() => alert('名前の変更に失敗しました。'));
+        } else if (act === 'overwrite') {
+            const sections = collectSections(area);
+            if (!sections.length) { alert('保存できるブロックがありません。'); return; }
+            if (!confirm('テンプレート「' + name + '」を、現在の' + AREA_LABEL[area]
+                + '構成（' + sections.length + 'ブロック）で上書きします。よろしいですか？')) return;
+            postJson('/templates/' + id + '/overwrite', {
+                type: area.toUpperCase(),
+                sections: sections
+            }).then((data) => {
+                if (data && data.error) { alert(data.error); return; }
+                showToast('テンプレート「' + name + '」を上書きしました');
+                openTplMenu(tplMenuAnchor, area);
+            }).catch(() => alert('上書きに失敗しました。'));
+        } else if (act === 'delete') {
+            if (!confirm('テンプレート「' + name + '」を削除します。よろしいですか？')) return;
+            fetch('/templates/' + id, { method: 'DELETE' })
+                .then((res) => {
+                    if (!res.ok) throw new Error('delete failed');
+                    showToast('テンプレートを削除しました');
+                    openTplMenu(tplMenuAnchor, area);
+                }).catch(() => alert('削除に失敗しました。'));
+        }
+    });
+
+    function applyTemplateById(area, id) {
+        fetch('/templates/' + id)
+            .then((res) => {
+                if (!res.ok) throw new Error('load failed');
+                return res.json();
+            })
+            .then((data) => {
+                const sections = data.sections || [];
+                if (!sections.length) {
+                    alert('このテンプレートには適用できるブロックがありません。');
+                    return;
+                }
+                const existing = getSectionList(area).querySelectorAll('.section-card').length;
+                if (existing > 0 &&
+                    !confirm('現在の' + AREA_LABEL[area] + 'ブロック（' + existing
+                        + '件）をテンプレートの構成に置き換えます。よろしいですか？\n'
+                        + '※「変更を保存」を押すまでデータベースには反映されません。')) {
+                    return;
+                }
+                const list = getSectionList(area);
+                list.innerHTML = '';
+                sections.forEach((s) => list.appendChild(buildCard(area, s)));
+                if (area === 'chord'
+                    && document.getElementById('chord-analysis').classList.contains('open')) {
+                    renderAnalysis();
+                }
+                showToast('テンプレート「' + (data.name || '') + '」を適用しました');
+            })
+            .catch(() => alert('テンプレートの適用に失敗しました。'));
+    }
+
+    // JSON POST 共通処理（成功・業務エラーともに本文を返す）
+    function postJson(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then((res) => res.json().catch(() => ({})));
+    }
+
+    // 汎用トースト（保存トーストを使い回す）
+    function showToast(message) {
+        const toast = document.getElementById('save-toast');
+        toast.textContent = message;
+        toast.style.display = 'block';
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => { toast.style.display = 'none'; }, 2200);
+    }
+
+    /* =========================================================
+       9) セクションの最小化（アコーディオン）
+       各ブロックのヘッダー右端の ▼/▲ で本文を折りたたむ。
+       ========================================================= */
+    function addMinToggle(headerEl, bodyEls) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'min-btn';
+        btn.textContent = '▼';
+        btn.title = '最小化 / 展開';
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const collapsed = headerEl.classList.toggle('section-collapsed');
+            bodyEls.forEach((el) => { el.style.display = collapsed ? 'none' : ''; });
+            btn.textContent = collapsed ? '▲' : '▼';
+        });
+        headerEl.appendChild(btn);
+    }
+
+    // 情報パネルの各カード（デモ音源 / BPM / Key / 世界観 / 進捗率）
+    document.querySelectorAll('.panel[data-panel="info"] .card').forEach((card) => {
+        const header = card.querySelector('.card-header');
+        const body = card.querySelector('.card-body');
+        if (!header || !body) return;
+        header.classList.add('collapsible-header');
+        addMinToggle(header, [body]);
+    });
+
+    // 歌詞 / コードのエリア（ヘッダー以降のコンテンツをまとめて折りたたむ）
+    document.querySelectorAll('.panel[data-panel="lyric"], .panel[data-panel="chord"]').forEach((panel) => {
+        const header = panel.querySelector('.area-header');
+        if (!header) return;
+        const bodyEls = [...panel.children].filter((el) => el !== header);
+        addMinToggle(header, bodyEls);
+    });
+</script>
+</body>
+</html>

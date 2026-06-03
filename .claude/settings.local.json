@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Bash(gradle -version)",
+      "Read(//tmp/**)",
+      "Bash(timeout 30 curl -sSL -o /tmp/apache-maven.tar.gz https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz)",
+      "Bash(timeout 60 curl -sSL -o /tmp/apache-maven.tar.gz \"https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz\")",
+      "Bash(timeout 60 curl -sSL -o /tmp/mvn.tar.gz \"https://dlcdn.apache.org/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(timeout 30 curl -sSL \"https://dlcdn.apache.org/maven/maven-3/\")",
+      "Bash(timeout 90 curl -sSL -o /tmp/mvn.tar.gz \"https://dlcdn.apache.org/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz\")",
+      "Bash(mkdir -p /home/shota/.local/maven)",
+      "Bash(tar -xzf /tmp/mvn.tar.gz -C /home/shota/.local/maven)",
+      "Bash(/home/shota/.local/maven/apache-maven-3.9.16/bin/mvn -version)",
+      "Bash(/home/shota/.local/maven/apache-maven-3.9.16/bin/mvn -q -DskipTests clean package)",
+      "Bash(nohup java -jar target/music-tracker-0.0.1-SNAPSHOT.jar)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(break)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8080/songs)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:8080/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8080/songs/new)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" -X POST http://localhost:8080/songs/save --data-urlencode \"title=春のデモ曲\" --data-urlencode \"status=MELODY_MAKING\" --data-urlencode \"memo=テスト投稿\" -d \"tagIds=1\" -d \"tagIds=2\")",
+      "Bash(curl -s http://localhost:8080/songs)",
+      "Bash(curl -s \"http://localhost:8080/songs?tagId=1\")",
+      "Bash(curl -s \"http://localhost:8080/songs\")",
+      "Bash(pkill -f \"music-tracker-0.0.1-SNAPSHOT.jar\")",
+      "Bash(jps)",
+      "Bash(pkill -9 -f \"music-tracker-0.0.1-SNAPSHOT.jar\")",
+      "Bash(awk '{print $2, $11, $12, $13}')",
+      "Read(//home/shota/.m2/**)",
+      "Read(//opt/**)",
+      "Read(//usr/lib/jvm/**)",
+      "Bash(find / -name 'mvn' -type f)"
+    ]
+  }
+}

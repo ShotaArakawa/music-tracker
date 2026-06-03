@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: music-tracker
+
+  datasource:
+    url: jdbc:mysql://localhost:3307/music_tracker_db?serverTimezone=Asia/Tokyo
+    username: tracker_user
+    password: tracker_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # 起動のたびにテーブル構成をエンティティに合わせて更新する（開発向け）
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    show-sql: true
+    open-in-view: false
+
+  thymeleaf:
+    cache: false
+
+  # デモ音源アップロードの容量上限（デフォルトは 1MB/10MB と小さいため引き上げる）
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8080
+
+# アプリ固有設定
+app:
+  audio:
+    # アップロードした音声ファイルの保存先（プロジェクト直下の uploaded-audio/）
+    upload-dir: uploaded-audio
