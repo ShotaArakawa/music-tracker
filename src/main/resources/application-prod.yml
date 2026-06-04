@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: music-tracker
+
+  # 1. Aiven（クラウド）のデータベースに繋ぐ設定
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useSSL=true&requireSSL=true&serverTimezone=Asia/Tokyo
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 2. 本番環境用のJPA設定（ログを綺麗にするためSQL非表示に）
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+    show-sql: false
+    open-in-view: false
+
+  # 3. デモ音源アップロードの容量上限（引き継ぎ必須！）
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8080
+
+# 4. アプリ固有設定（音源の保存先）
+app:
+  audio:
+    upload-dir: uploaded-audio
