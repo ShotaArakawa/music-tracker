@@ -31,7 +31,9 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/signup", "/api/health",
-                        "/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico").permitAll()
+                        "/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico",
+                        // PWA関連（manifest / Service Worker / アイコン）は未認証で取得できるようにする
+                        "/manifest.json", "/sw.js", "/icon.png").permitAll()
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
