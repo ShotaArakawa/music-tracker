@@ -4,8 +4,8 @@ spring:
 
   datasource:
     url: jdbc:mysql://localhost:3307/music_tracker_db?serverTimezone=Asia/Tokyo
-    username: tracker_user
-    password: tracker_password
+    username: ${LOCAL_DB_USER:tracker_user}
+    password: ${LOCAL_DB_PASS:tracker_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

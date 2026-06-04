@@ -14,3 +14,9 @@ target/
 
 # Logs
 *.log
+
+# アップロードされたデモ音源などのファイル
+uploaded-audio/
+
+# 環境変数ファイル
+.env
