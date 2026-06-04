@@ -282,10 +282,15 @@
             save(td, field, songId, editor.value, originalHTML);
         }
 
-        // select は変更で即確定、テキストは Enter / blur で確定
+        // select は change で確定する。
+        // blur は「選択せず別の場所をクリックした」場合のキャンセル用だが、
+        // 環境によっては option 選択時に blur が change より先に（＝まだ旧値のまま）
+        // 発火し、旧値で保存→done で本来の change が無視される不具合があった。
+        // そのため blur のキャンセル処理は setTimeout で遅延させ、
+        // 同一イベントループ内で同期的に発火する change を必ず先に確定させる。
         if (editor.tagName === 'SELECT') {
             editor.addEventListener('change', () => finish(true));
-            editor.addEventListener('blur', () => finish(true));
+            editor.addEventListener('blur', () => setTimeout(() => finish(false), 0));
         } else {
             editor.addEventListener('blur', () => finish(true));
             editor.addEventListener('keydown', (e) => {
