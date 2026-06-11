@@ -15,7 +15,7 @@
     <artifactId>music-tracker</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>music-tracker</name>
-    <description>作曲デモ・進捗トラッカー</description>
+    <description>作曲トラッカー</description>
 
     <properties>
         <java.version>21</java.version>

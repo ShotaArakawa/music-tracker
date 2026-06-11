@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <th:block th:replace="~{fragments/head :: commonHead('作曲デモ・進捗トラッカー')}"></th:block>
+    <th:block th:replace="~{fragments/head :: commonHead('作曲トラッカー')}"></th:block>
     <style>
         /* インライン編集できるセルであることを示す */
         td.editable { cursor: pointer; }
@@ -25,23 +25,49 @@
         }
         .row-handle:active { cursor: grabbing; }
         tr.dragging { opacity: .45; background-color: #eef4ff; }
+
+        /* ---- モバイルカード ---- */
+        .song-card {
+            background: #fff;
+            border-radius: .6rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.07);
+            padding: 1rem;
+            margin-bottom: .75rem;
+        }
+
+        /* ---- タグ絞り込み横スクロール ---- */
+        .tag-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; }
+        .tag-scroll .d-flex { flex-wrap: nowrap; }
+
+        /* ---- FAB（新規登録） ---- */
+        .fab {
+            position: fixed;
+            bottom: 1.5rem; right: 1.5rem;
+            z-index: 1000;
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            font-size: 1.5rem; line-height: 1;
+            padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 14px rgba(13,110,253,.4);
+        }
     </style>
 </head>
 <body class="bg-light">
 <div class="container py-4">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0">🎵 作曲デモ・進捗トラッカー</h1>
-        <div class="d-flex gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h1 class="h3 mb-0">🎵 作曲トラッカー</h1>
+        <div class="d-flex gap-2 flex-wrap">
             <a th:if="${lastOpenedSong != null}"
                th:href="@{/songs/{id}(id=${lastOpenedSong.id})}"
-               class="btn btn-outline-success"
+               class="btn btn-outline-success d-none d-md-inline-flex"
                th:title="'「' + ${lastOpenedSong.title} + '」を開く'">
                 🎵 最後に編集した曲に戻る
             </a>
             <a th:href="@{/calendar}" class="btn btn-outline-primary">📅 カレンダー</a>
-            <a th:href="@{/songs/new}" class="btn btn-primary">＋ 新規登録</a>
-            <span class="vr mx-1"></span>
+            <a th:href="@{/songs/new}" class="btn btn-primary d-none d-md-inline-flex">＋ 新規登録</a>
+            <span class="vr mx-1 d-none d-md-inline"></span>
             <a th:href="@{/profile}" class="btn btn-outline-secondary align-self-center"
                title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
             <form th:action="@{/logout}" method="post" class="m-0">
@@ -68,23 +94,27 @@
     <!-- 保存・削除後のメッセージ -->
     <div th:if="${message}" class="alert alert-success" role="alert" th:text="${message}"></div>
 
-    <p class="text-muted small">
+    <p class="text-muted small d-none d-md-block">
         💡 曲名・ステータス・タグ・メモのセルをクリックすると、その場で編集できます（自動保存）。
     </p>
 
     <!-- タグ絞り込み -->
     <div class="mb-4">
-        <span class="me-2 fw-bold">タグで絞り込み:</span>
-        <a th:href="@{/songs}"
-           class="btn btn-sm me-1 mb-1"
-           th:classappend="${selectedTagId == null} ? 'btn-dark' : 'btn-outline-dark'">
-            すべて
-        </a>
-        <a th:each="tag : ${tags}"
-           th:href="@{/songs(tagId=${tag.id})}"
-           class="btn btn-sm me-1 mb-1"
-           th:classappend="${selectedTagId != null and selectedTagId == tag.id} ? 'btn-secondary' : 'btn-outline-secondary'"
-           th:text="${tag.name}">タグ</a>
+        <span class="fw-bold small d-block mb-1">タグで絞り込み:</span>
+        <div class="tag-scroll">
+            <div class="d-flex gap-1">
+                <a th:href="@{/songs}"
+                   class="btn btn-sm flex-shrink-0"
+                   th:classappend="${selectedTagId == null} ? 'btn-dark' : 'btn-outline-dark'">
+                    すべて
+                </a>
+                <a th:each="tag : ${tags}"
+                   th:href="@{/songs(tagId=${tag.id})}"
+                   class="btn btn-sm flex-shrink-0"
+                   th:classappend="${selectedTagId != null and selectedTagId == tag.id} ? 'btn-secondary' : 'btn-outline-secondary'"
+                   th:text="${tag.name}">タグ</a>
+            </div>
+        </div>
     </div>
 
     <!-- 曲一覧 -->
@@ -92,7 +122,8 @@
         まだ曲が登録されていません。「＋ 新規登録」から追加してみましょう。
     </div>
 
-    <div class="table-responsive" th:unless="${songs.isEmpty()}">
+    <!-- デスクトップ: テーブル表示 -->
+    <div class="table-responsive d-none d-md-block" th:unless="${songs.isEmpty()}">
         <table class="table table-hover align-middle bg-white shadow-sm rounded">
             <thead class="table-light">
             <tr>
@@ -169,6 +200,33 @@
             </tbody>
         </table>
     </div>
+
+    <!-- モバイル: カード型一覧 -->
+    <div class="d-md-none" th:unless="${songs.isEmpty()}">
+        <div th:each="song : ${songs}" class="song-card">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
+                <span class="badge flex-shrink-0"
+                      th:classappend="${song.status.colorClass}"
+                      th:text="${song.status.label}">ステータス</span>
+            </div>
+            <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
+                <span th:each="tag : ${song.tags}"
+                      class="badge bg-light text-dark border"
+                      th:text="${tag.name}">タグ</span>
+            </div>
+            <div th:unless="${#strings.isEmpty(song.deadline)}" class="small text-muted mb-1">
+                📅 <span th:text="${song.deadline}">納期</span>
+            </div>
+            <div th:unless="${#strings.isEmpty(song.memo)}"
+                 class="small text-muted mb-2 text-truncate"
+                 th:text="${song.memo}"></div>
+            <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
+        </div>
+    </div>
+
+    <!-- スマホ用 FAB（新規登録） -->
+    <a th:href="@{/songs/new}" class="btn btn-primary fab d-md-none" title="新規登録">＋</a>
 
 </div>
 

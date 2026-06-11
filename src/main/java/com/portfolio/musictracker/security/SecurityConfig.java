@@ -36,7 +36,7 @@ public class SecurityConfig {
             UserDetailsService userDetailsService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/signup", "/api/health",
+                        .requestMatchers("/", "/login", "/signup", "/api/health",
                                 "/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico",
                                 // PWA関連（manifest / Service Worker / アイコン）は未認証で取得できるようにする
                                 "/manifest.json", "/sw.js", "/icon.png")

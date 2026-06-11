@@ -389,6 +389,41 @@
         .template-menu .tm-act:hover { background: #e7ecf3; }
         .template-menu .tm-act[data-act="delete"]:hover { background: #fde8e8; }
         .template-menu .tm-empty { color: #9aa3ad; font-size: .82rem; padding: .5rem; }
+
+        /* =========================================================
+           スマホ対応：タブ切り替え
+           ========================================================= */
+        @media (max-width: 767.98px) {
+            #split { flex-direction: column; padding: .5rem; padding-bottom: 80px; }
+            .gutter { display: none !important; }
+            /* タブ非アクティブパネルは非表示 */
+            .panel { display: none !important; }
+            .panel.tab-active { display: flex !important; flex-direction: column; }
+            /* ヘッダーの省スペース化 */
+            .core-header h1.h5 { font-size: .88rem; }
+            .title-text {
+                max-width: 9rem;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                display: inline-block; vertical-align: middle;
+            }
+            #save-status { display: none !important; }
+            /* デスクトップ保存ボタンは非表示（モバイル固定バーを使う） */
+            #save-all { display: none !important; }
+        }
+
+        /* ---- モバイル固定保存バー ---- */
+        .mobile-save-bar { display: none; }
+        @media (max-width: 767.98px) {
+            .mobile-save-bar {
+                display: flex;
+                position: fixed; bottom: 0; left: 0; right: 0;
+                z-index: 1100;
+                background: #fff;
+                border-top: 1px solid #e3e6ea;
+                padding: .75rem 1rem;
+                box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+            }
+        }
     </style>
 </head>
 <body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})}">
@@ -396,11 +431,11 @@
 <!-- ===== スクロール追従ヘッダー（右上に一括保存ボタン） ===== -->
 <div class="core-header">
     <div class="d-flex justify-content-between align-items-center px-3 py-2 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <a th:href="@{/songs}" class="btn btn-sm btn-outline-secondary">← 一覧</a>
-            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary">📅 カレンダー</a>
+            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex">📅 カレンダー</a>
             <h1 class="h5 mb-0">
-                🎼 <span th:text="${song.title}">曲名</span>
+                🎼 <span class="title-text" th:text="${song.title}">曲名</span>
                 <span class="badge align-middle"
                       th:classappend="${song.status.colorClass}"
                       th:text="${song.status.label}">ステータス</span>
@@ -409,12 +444,20 @@
         <div class="d-flex align-items-center gap-2">
             <span id="save-status" class="text-muted small"></span>
             <button type="button" id="save-all" class="btn btn-primary">💾 変更を保存</button>
-            <span class="vr mx-1"></span>
-            <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary"
+            <span class="vr mx-1 d-none d-md-inline"></span>
+            <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex"
                title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
-            <form th:action="@{/logout}" method="post" class="m-0">
+            <form th:action="@{/logout}" method="post" class="m-0 d-none d-md-block">
                 <button type="submit" class="btn btn-sm btn-outline-secondary">ログアウト</button>
             </form>
+        </div>
+    </div>
+    <!-- モバイル: タブナビゲーション -->
+    <div class="d-md-none border-top">
+        <div class="nav nav-tabs nav-fill" id="mobile-tab-nav" style="border-bottom: none;">
+            <button type="button" class="nav-link active py-2" data-tab="lyric" style="border-radius: 0;">📝 歌詞</button>
+            <button type="button" class="nav-link py-2" data-tab="chord" style="border-radius: 0;">🎹 コード</button>
+            <button type="button" class="nav-link py-2" data-tab="info" style="border-radius: 0;">🎧 情報</button>
         </div>
     </div>
 </div>
@@ -511,6 +554,17 @@
 
     <!-- 右：曲情報・世界観・進捗 -->
     <aside class="panel" data-panel="info">
+
+        <!-- スマホ用: カレンダー/プロフィール/ログアウトへのリンク -->
+        <div class="d-md-none mb-3">
+            <div class="d-flex gap-2">
+                <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary flex-fill">📅 カレンダー</a>
+                <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary flex-fill">👤 <span th:text="${currentUsername}">user</span></a>
+                <form th:action="@{/logout}" method="post" class="flex-fill m-0">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100">ログアウト</button>
+                </form>
+            </div>
+        </div>
 
         <!-- デモ音源 -->
         <div class="card shadow-sm mb-3">
@@ -689,6 +743,11 @@
 
 <!-- 保存トースト -->
 <div class="alert alert-success save-toast shadow" id="save-toast" role="alert">保存しました</div>
+
+<!-- モバイル: 固定保存バー -->
+<div class="mobile-save-bar">
+    <button type="button" id="save-all-mobile" class="btn btn-primary w-100 py-3">💾 変更を保存</button>
+</div>
 
 <script th:inline="javascript">
     const SAVE_URL = document.body.getAttribute('data-save-url');
@@ -1572,6 +1631,47 @@
         const bodyEls = [...panel.children].filter((el) => el !== header);
         addMinToggle(header, bodyEls);
     });
+
+    /* =========================================================
+       10) モバイルタブ切り替え
+       ========================================================= */
+    (function () {
+        const tabNav = document.getElementById('mobile-tab-nav');
+        if (!tabNav) return;
+
+        function activateTab(area) {
+            tabNav.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
+            const btn = tabNav.querySelector('[data-tab="' + area + '"]');
+            if (btn) btn.classList.add('active');
+            document.querySelectorAll('#split .panel').forEach((p) => p.classList.remove('tab-active'));
+            const panel = document.querySelector('.panel[data-panel="' + area + '"]');
+            if (panel) panel.classList.add('tab-active');
+        }
+
+        tabNav.querySelectorAll('[data-tab]').forEach((btn) => {
+            btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+        });
+
+        function initTabs() {
+            if (window.innerWidth < 768) activateTab('lyric');
+        }
+        initTabs();
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                document.querySelectorAll('#split .panel').forEach((p) => p.classList.remove('tab-active'));
+            } else {
+                const active = tabNav.querySelector('.nav-link.active');
+                if (active) activateTab(active.dataset.tab);
+            }
+        });
+
+        // モバイル固定保存ボタンはデスクトップ側の save-all に委譲
+        const mobileBtn = document.getElementById('save-all-mobile');
+        if (mobileBtn) {
+            mobileBtn.addEventListener('click', () => document.getElementById('save-all').click());
+        }
+    })();
 </script>
 </body>
 </html>

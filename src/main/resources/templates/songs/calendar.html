@@ -35,6 +35,21 @@
         .cal-ev.over { background: #f8d7da; color: #842029; }
         .cal-ev:hover { filter: brightness(.95); }
 
+        /* ---- モバイルリスト ---- */
+        .deadline-item {
+            display: flex; align-items: center; gap: .6rem;
+            padding: .75rem .5rem;
+            border-bottom: 1px solid #e3e6ea;
+            min-height: 44px;
+        }
+        .deadline-dot { font-size: 1rem; flex-shrink: 0; }
+        .deadline-dot.over  { color: #dc3545; }
+        .deadline-dot.soon  { color: #fd7e14; }
+        .deadline-dot.normal { color: #6c757d; }
+        .deadline-title { font-weight: 700; flex-grow: 1; text-decoration: none; color: inherit; }
+        .deadline-title:hover { text-decoration: underline; }
+        .deadline-meta { font-size: .8rem; color: #6c757d; white-space: nowrap; flex-shrink: 0; }
+
         @media (max-width: 575.98px) {
             .cal-cell { min-height: 72px; }
             .cal-ev { font-size: .64rem; }
@@ -46,7 +61,7 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h1 class="h3 mb-0">📅 制作スケジュール</h1>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <a th:href="@{/profile}" class="btn btn-outline-secondary"
                title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
             <a th:href="@{/songs}" class="btn btn-outline-secondary">← ダッシュボードに戻る</a>
@@ -56,42 +71,64 @@
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <!-- 月送りナビ -->
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <button type="button" id="prev" class="btn btn-outline-primary btn-sm">◀ 前の月</button>
-                <h2 class="h5 mb-0" id="cal-title">　</h2>
-                <div class="d-flex gap-2">
-                    <button type="button" id="today" class="btn btn-outline-secondary btn-sm">今日</button>
-                    <button type="button" id="next" class="btn btn-outline-primary btn-sm">次の月 ▶</button>
+    <!-- 表示切替ボタン -->
+    <div class="d-flex gap-2 mb-3">
+        <button type="button" id="view-calendar-btn" class="btn btn-sm btn-outline-primary active">📅 カレンダー</button>
+        <button type="button" id="view-list-btn" class="btn btn-sm btn-outline-secondary">📋 リスト</button>
+    </div>
+
+    <!-- カレンダービュー -->
+    <div id="calendar-view">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <!-- 月送りナビ -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button type="button" id="prev" class="btn btn-outline-primary btn-sm">◀ 前の月</button>
+                    <h2 class="h5 mb-0" id="cal-title">　</h2>
+                    <div class="d-flex gap-2">
+                        <button type="button" id="today" class="btn btn-outline-secondary btn-sm">今日</button>
+                        <button type="button" id="next" class="btn btn-outline-primary btn-sm">次の月 ▶</button>
+                    </div>
                 </div>
-            </div>
 
-            <!-- 曜日見出し -->
-            <div class="cal-grid mb-1">
-                <div class="cal-head sun">日</div>
-                <div class="cal-head">月</div>
-                <div class="cal-head">火</div>
-                <div class="cal-head">水</div>
-                <div class="cal-head">木</div>
-                <div class="cal-head">金</div>
-                <div class="cal-head sat">土</div>
-            </div>
+                <!-- 曜日見出し -->
+                <div class="cal-grid mb-1">
+                    <div class="cal-head sun">日</div>
+                    <div class="cal-head">月</div>
+                    <div class="cal-head">火</div>
+                    <div class="cal-head">水</div>
+                    <div class="cal-head">木</div>
+                    <div class="cal-head">金</div>
+                    <div class="cal-head sat">土</div>
+                </div>
 
-            <!-- 日付グリッド（JSが描画） -->
-            <div class="cal-grid" id="cal-body"></div>
+                <!-- 日付グリッド（JSが描画） -->
+                <div class="cal-grid" id="cal-body"></div>
 
-            <div class="d-flex gap-3 mt-3 small text-muted flex-wrap">
-                <span><span class="badge bg-danger">　</span> 納期超過</span>
-                <span><span class="badge bg-warning text-dark">　</span> 3日以内</span>
-                <span><span class="badge" style="background:#e7f1ff;color:#084298;">　</span> 予定</span>
+                <div class="d-flex gap-3 mt-3 small text-muted flex-wrap">
+                    <span><span class="badge bg-danger">　</span> 納期超過</span>
+                    <span><span class="badge bg-warning text-dark">　</span> 3日以内</span>
+                    <span><span class="badge" style="background:#e7f1ff;color:#084298;">　</span> 予定</span>
+                </div>
+                <p id="cal-empty" class="text-muted small mt-3 mb-0" style="display:none;">
+                    納期が設定された曲はまだありません。一覧画面で各曲の「納期」を入力すると、ここに表示されます。
+                </p>
             </div>
-            <p id="cal-empty" class="text-muted small mt-3 mb-0" style="display:none;">
-                納期が設定された曲はまだありません。一覧画面で各曲の「納期」を入力すると、ここに表示されます。
-            </p>
         </div>
     </div>
+
+    <!-- リストビュー -->
+    <div id="list-view" style="display:none;">
+        <div class="card shadow-sm">
+            <div class="card-body px-3 py-2">
+                <div id="list-body"></div>
+                <p id="list-empty" class="text-muted small mt-2 mb-0" style="display:none;">
+                    納期が設定された曲はまだありません。
+                </p>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -128,7 +165,6 @@
         const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
         const tKey = todayKey();
 
-        // 前月の余白 + 当月 + 翌月の余白 を 42 マス（6週）で描画
         const cells = [];
         for (let i = 0; i < startDow; i++) {
             const d = new Date(viewYear, viewMonth, 1 - (startDow - i));
@@ -173,6 +209,39 @@
         });
     }
 
+    function renderList() {
+        const allEvents = [];
+        Object.values(eventsByDate).forEach((evs) => evs.forEach((ev) => allEvents.push(ev)));
+        allEvents.sort((a, b) => a.date.localeCompare(b.date));
+
+        const listEmpty = document.getElementById('list-empty');
+        const listBody = document.getElementById('list-body');
+
+        if (!allEvents.length) {
+            listBody.innerHTML = '';
+            listEmpty.style.display = 'block';
+            return;
+        }
+        listEmpty.style.display = 'none';
+
+        let html = '';
+        allEvents.forEach((ev) => {
+            const cls = classFor(ev);
+            const dateParts = ev.date.slice(5).split('-');
+            const dateStr = dateParts[0] + '/' + dateParts[1];
+            let status;
+            if (ev.overdue) status = '（' + (-1 * ev.daysUntil) + '日超過）';
+            else if (ev.daysUntil === 0) status = '（本日締切）';
+            else status = '（あと' + ev.daysUntil + '日）';
+            html += '<div class="deadline-item">'
+                + '<span class="deadline-dot ' + cls + '">●</span>'
+                + '<a href="/songs/' + ev.songId + '" class="deadline-title">' + esc(ev.title) + '</a>'
+                + '<span class="deadline-meta">' + dateStr + ' ' + status + '</span>'
+                + '</div>';
+        });
+        listBody.innerHTML = html;
+    }
+
     function load() {
         fetch('/api/calendar/events')
             .then((res) => res.json())
@@ -187,10 +256,18 @@
                 viewYear = now.getFullYear();
                 viewMonth = now.getMonth();
                 render();
+                autoView();
             })
             .catch(() => {
                 document.getElementById('cal-title').textContent = '読み込みに失敗しました';
             });
+    }
+
+    // スマホはリスト表示をデフォルトに
+    function autoView() {
+        if (window.innerWidth < 768) {
+            document.getElementById('view-list-btn').click();
+        }
     }
 
     document.getElementById('prev').addEventListener('click', () => {
@@ -201,6 +278,25 @@
     });
     document.getElementById('today').addEventListener('click', () => {
         const now = new Date(); viewYear = now.getFullYear(); viewMonth = now.getMonth(); render();
+    });
+
+    document.getElementById('view-calendar-btn').addEventListener('click', function() {
+        document.getElementById('calendar-view').style.display = '';
+        document.getElementById('list-view').style.display = 'none';
+        this.classList.replace('btn-outline-secondary', 'btn-outline-primary');
+        this.classList.add('active');
+        document.getElementById('view-list-btn').classList.replace('btn-outline-primary', 'btn-outline-secondary');
+        document.getElementById('view-list-btn').classList.remove('active');
+    });
+
+    document.getElementById('view-list-btn').addEventListener('click', function() {
+        document.getElementById('calendar-view').style.display = 'none';
+        document.getElementById('list-view').style.display = '';
+        this.classList.replace('btn-outline-secondary', 'btn-outline-primary');
+        this.classList.add('active');
+        document.getElementById('view-calendar-btn').classList.replace('btn-outline-primary', 'btn-outline-secondary');
+        document.getElementById('view-calendar-btn').classList.remove('active');
+        renderList();
     });
 
     load();
