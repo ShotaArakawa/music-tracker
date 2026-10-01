@@ -42,6 +42,32 @@
 
     <!-- Web用アイコン (Favicon) -->
     <link rel="icon" href="/icon.png" type="image/png">
+
+    <!--
+        CSRF 対策: フォームは th:action が hidden の _csrf を自動で付ける。
+        Ajax（fetch）は、同一オリジンへの GET 以外のリクエストにトークンのヘッダーを自動で付ける。
+    -->
+    <meta name="_csrf" th:if="${_csrf != null}" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:if="${_csrf != null}" th:content="${_csrf.headerName}">
+    <script>
+        (function () {
+            const token = document.querySelector('meta[name="_csrf"]');
+            const header = document.querySelector('meta[name="_csrf_header"]');
+            if (!token || !header) return;
+            const originalFetch = window.fetch;
+            window.fetch = function (input, init) {
+                init = init || {};
+                const method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+                const url = new URL(input instanceof Request ? input.url : input, location.href);
+                if (method !== 'GET' && method !== 'HEAD' && url.origin === location.origin) {
+                    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+                    headers.set(header.content, token.content);
+                    init.headers = headers;
+                }
+                return originalFetch.call(this, input, init);
+            };
+        })();
+    </script>
 </th:block>
 </body>
 </html>
