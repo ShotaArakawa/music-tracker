@@ -40,5 +40,13 @@ app:
     # 初期ユーザー demo / demo1234 を作成する（ローカル開発用。本番では無効）
     demo-user: true
   audio:
-    # アップロードした音声ファイルの保存先（プロジェクト直下の uploaded-audio/）
+    # 保存先: local（ディスク）/ s3（Cloudflare R2 など。設定は application-prod.yml を参照）
+    storage: ${AUDIO_STORAGE:local}
+    # local の保存先（プロジェクト直下の uploaded-audio/）
     upload-dir: uploaded-audio
+    s3:
+      endpoint: ${R2_ENDPOINT:}
+      region: ${R2_REGION:auto}
+      bucket: ${R2_BUCKET:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}

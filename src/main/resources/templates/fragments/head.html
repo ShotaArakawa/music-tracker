@@ -43,10 +43,10 @@
     <!-- Web用アイコン (Favicon) -->
     <link rel="icon" href="/icon.png" type="image/png">
 
-    <!--
+    <!--/*
         CSRF 対策: フォームは th:action が hidden の _csrf を自動で付ける。
         Ajax（fetch）は、同一オリジンへの GET 以外のリクエストにトークンのヘッダーを自動で付ける。
-    -->
+    */-->
     <meta name="_csrf" th:if="${_csrf != null}" th:content="${_csrf.token}">
     <meta name="_csrf_header" th:if="${_csrf != null}" th:content="${_csrf.headerName}">
     <script>

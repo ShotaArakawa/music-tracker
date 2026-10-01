@@ -8,9 +8,13 @@ import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.security.CustomUserDetails;
 import com.portfolio.musictracker.service.ScheduleService;
 import com.portfolio.musictracker.service.SongService;
+import com.portfolio.musictracker.storage.AudioStorage;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
@@ -29,21 +33,28 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Controller
 @RequestMapping("/songs")
 public class SongController {
 
+    private static final Logger log = LoggerFactory.getLogger(SongController.class);
+
     private final SongService songService;
     private final ScheduleService scheduleService;
+    private final AudioStorage audioStorage;
 
-    public SongController(SongService songService, ScheduleService scheduleService) {
+    public SongController(SongService songService, ScheduleService scheduleService,
+                          AudioStorage audioStorage) {
         this.songService = songService;
         this.scheduleService = scheduleService;
+        this.audioStorage = audioStorage;
     }
 
     /** ダッシュボード（曲一覧）。tagId が指定されればタグで絞り込む。 */
@@ -157,19 +168,34 @@ public class SongController {
             redirectAttributes.addFlashAttribute("message", "デモ音源をアップロードしました。");
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
+        } catch (IllegalStateException e) {
+            // 保存先（ディスク / R2）の障害。原因はログに残し、画面には概要だけ出す
+            log.warn("デモ音源の保存に失敗しました: songId={}", id, e);
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/songs/" + id;
     }
 
     /**
      * デモ音源の再生用配信。所有者だけが取得できる。
-     * Resource を返すと Spring MVC が Range リクエスト（シーク再生）にも対応する。
+     * <ul>
+     *     <li>R2 などのストレージ: 短時間有効な署名付き URL へリダイレクト</li>
+     *     <li>ローカルディスク: アプリから配信（Resource を返すと Range リクエストにも対応する）</li>
+     * </ul>
      */
     @GetMapping("/{id}/audio")
     public ResponseEntity<Resource> audio(@PathVariable Long id,
                                           @AuthenticationPrincipal CustomUserDetails principal) {
         try {
-            Resource resource = songService.loadAudio(id, principal.getUser());
+            String stored = songService.findAudioFileName(id, principal.getUser());
+            Optional<URI> url = audioStorage.playbackUrl(stored);
+            if (url.isPresent()) {
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(url.get())
+                        .cacheControl(CacheControl.noStore())
+                        .build();
+            }
+            Resource resource = audioStorage.load(stored);
             MediaType type = MediaTypeFactory.getMediaType(resource)
                     .orElse(MediaType.APPLICATION_OCTET_STREAM);
             return ResponseEntity.ok()

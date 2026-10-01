@@ -11,7 +11,9 @@ import com.portfolio.musictracker.entity.Tag;
 import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.repository.SongRepository;
 import com.portfolio.musictracker.repository.TagRepository;
-import org.springframework.core.io.Resource;
+import com.portfolio.musictracker.storage.AudioStorage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,15 +35,17 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class SongService {
 
+    private static final Logger log = LoggerFactory.getLogger(SongService.class);
+
     private final SongRepository songRepository;
     private final TagRepository tagRepository;
-    private final AudioStorageService audioStorageService;
+    private final AudioStorage audioStorage;
 
     public SongService(SongRepository songRepository, TagRepository tagRepository,
-                       AudioStorageService audioStorageService) {
+                       AudioStorage audioStorage) {
         this.songRepository = songRepository;
         this.tagRepository = tagRepository;
-        this.audioStorageService = audioStorageService;
+        this.audioStorage = audioStorage;
     }
 
     /**
@@ -137,13 +141,13 @@ public class SongService {
     @Transactional
     public Song updateAudio(Long id, MultipartFile file, User user) {
         Song song = findOwned(id, user);
-        String stored = audioStorageService.store(file, id);
+        String stored = audioStorage.store(file, id);
         // DB 更新がロールバックされたら、保存したばかりのファイルを片付ける
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
                 if (status == STATUS_ROLLED_BACK) {
-                    audioStorageService.delete(stored);
+                    audioStorage.delete(stored);
                 }
             }
         });
@@ -151,15 +155,18 @@ public class SongService {
         song.setAudioFilePath(stored);
         Song saved = songRepository.save(song);
         if (previous != null && !previous.equals(stored)) {
-            afterCommit(() -> audioStorageService.delete(previous));
+            afterCommit(() -> audioStorage.delete(previous));
         }
         return saved;
     }
 
-    /** 曲に紐づくデモ音源を読み出す（所有者のみ）。 */
-    public Resource loadAudio(Long id, User user) {
-        Song song = findOwned(id, user);
-        return audioStorageService.load(song.getAudioFilePath());
+    /** 曲に紐づくデモ音源の保存ファイル名を返す（所有者のみ）。未登録なら例外。 */
+    public String findAudioFileName(Long id, User user) {
+        String stored = findOwned(id, user).getAudioFilePath();
+        if (stored == null) {
+            throw new IllegalArgumentException("音源が登録されていません");
+        }
+        return stored;
     }
 
     /** 曲を削除する。デモ音源ファイルも DB のコミット後に削除する。 */
@@ -169,16 +176,23 @@ public class SongService {
         String audio = song.getAudioFilePath();
         songRepository.delete(song);
         if (audio != null) {
-            afterCommit(() -> audioStorageService.delete(audio));
+            afterCommit(() -> audioStorage.delete(audio));
         }
     }
 
-    /** トランザクションのコミット後に処理を実行する（ロールバック時はファイルを消さない）。 */
+    /**
+     * トランザクションのコミット後に処理を実行する（ロールバック時はファイルを消さない）。
+     * DB の変更は確定済みのため、ファイル削除に失敗してもログだけ残して処理は成功扱いにする。
+     */
     private void afterCommit(Runnable action) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                action.run();
+                try {
+                    action.run();
+                } catch (RuntimeException e) {
+                    log.warn("音源ファイルの後片付けに失敗しました", e);
+                }
             }
         });
     }
