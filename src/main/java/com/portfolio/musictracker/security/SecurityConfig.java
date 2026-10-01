@@ -23,7 +23,8 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class SecurityConfig {
 
-    @Value("${REMEMBER_ME_KEY:musictracker-default-secret-key}")
+    /** Remember Me トークンの署名鍵。本番は環境変数 REMEMBER_ME_KEY 必須（未設定なら起動失敗）。 */
+    @Value("${app.security.remember-me-key}")
     private String rememberMeKey;
 
     @Bean

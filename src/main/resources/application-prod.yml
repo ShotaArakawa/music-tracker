@@ -31,5 +31,11 @@ server:
 
 # 4. アプリ固有設定（音源の保存先）
 app:
+  security:
+    # 既定値なし：環境変数 REMEMBER_ME_KEY が未設定なら起動を失敗させる
+    remember-me-key: ${REMEMBER_ME_KEY}
+  init:
+    # 本番では既知パスワードの初期ユーザーを作らない
+    demo-user: false
   audio:
     upload-dir: uploaded-audio

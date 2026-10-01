@@ -33,6 +33,12 @@ server:
 
 # アプリ固有設定
 app:
+  security:
+    # Remember Me トークンの署名鍵（ローカル開発用の既定値）
+    remember-me-key: ${REMEMBER_ME_KEY:musictracker-local-dev-key}
+  init:
+    # 初期ユーザー demo / demo1234 を作成する（ローカル開発用。本番では無効）
+    demo-user: true
   audio:
     # アップロードした音声ファイルの保存先（プロジェクト直下の uploaded-audio/）
     upload-dir: uploaded-audio
