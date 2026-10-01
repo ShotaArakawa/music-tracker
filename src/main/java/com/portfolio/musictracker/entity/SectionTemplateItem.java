@@ -12,8 +12,7 @@ import jakarta.persistence.Table;
 /**
  * {@link SectionTemplate} を構成する 1 ブロック分のデータ。
  * <p>
- * 見出し名・並び順に加え、コードテンプレートでは本文（コード進行）と
- * セクション個別 Key も保持できるため、構成だけでなく中身ごと使い回せる。
+ * 見出し名・並び順に加えて本文も保持できるため、構成だけでなく中身ごと使い回せる。
  */
 @Entity
 @Table(name = "section_template_items")
@@ -36,22 +35,17 @@ public class SectionTemplateItem {
     @Column(nullable = false)
     private int sortOrder;
 
-    /** 本文（歌詞 or コード進行）。構成だけ使いたい場合は空でもよい。 */
+    /** 本文（歌詞）。構成だけ使いたい場合は空でもよい。 */
     @Column(columnDefinition = "TEXT")
     private String content;
-
-    /** コードテンプレートのセクション個別 Key（転調用）。 */
-    @Column(length = 20)
-    private String sectionKey;
 
     public SectionTemplateItem() {
     }
 
-    public SectionTemplateItem(String name, int sortOrder, String content, String sectionKey) {
+    public SectionTemplateItem(String name, int sortOrder, String content) {
         this.name = name;
         this.sortOrder = sortOrder;
         this.content = content;
-        this.sectionKey = sectionKey;
     }
 
     public Long getId() {
@@ -92,13 +86,5 @@ public class SectionTemplateItem {
 
     public void setContent(String content) {
         this.content = content;
-    }
-
-    public String getSectionKey() {
-        return sectionKey;
-    }
-
-    public void setSectionKey(String sectionKey) {
-        this.sectionKey = sectionKey;
     }
 }

@@ -1,5 +1,6 @@
 package com.portfolio.musictracker;
 
+import com.portfolio.musictracker.chordchart.ChordChartRepository;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.repository.SectionTemplateRepository;
@@ -40,12 +41,15 @@ public abstract class IntegrationTestSupport {
     protected SectionTemplateRepository templateRepository;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    @Autowired
+    private ChordChartRepository chordChartRepository;
 
     protected User alice;
     protected User bob;
 
     @BeforeEach
     void resetData() {
+        chordChartRepository.deleteAll();
         templateRepository.deleteAll();
         songRepository.deleteAll();
         userRepository.deleteAll();

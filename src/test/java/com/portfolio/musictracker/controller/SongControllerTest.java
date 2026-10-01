@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SongControllerTest extends IntegrationTestSupport {
@@ -124,11 +125,12 @@ class SongControllerTest extends IntegrationTestSupport {
                 .getLyricSections().stream()
                 .filter(x -> x.getName().equals("サビ")).findFirst().orElseThrow().getId());
 
-        // サビを先頭に、新規「Cメロ」を追加、Aメロ/Bメロは削除
+        // サビを先頭に、新規「Cメロ」を追加、Aメロ/Bメロは削除。コード譜も一緒に保存する
         String body = "{\"bpm\":120,\"musicKey\":\" Am \",\"lyricProgress\":150,"
                 + "\"lyricSections\":[{\"id\":" + sabiId + ",\"name\":\"サビ\",\"content\":\"歌詞\"},"
                 + "{\"name\":\"Cメロ\",\"content\":\"\"}],"
-                + "\"chordSections\":[{\"name\":\"\",\"content\":\"C G\",\"sectionKey\":\"G\"}]}";
+                + "\"chordSheet\":{\"data\":[[\"【サビ】\",\"F\",\"G\"]],\"style\":{\"B1\":\"font-weight: bold;\"},"
+                + "\"mergeCells\":{},\"colWidths\":[90,60,60],\"rowHeights\":[30]}}";
         mockMvc.perform(post("/songs/" + song.getId() + "/save").with(as(alice)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
@@ -140,11 +142,18 @@ class SongControllerTest extends IntegrationTestSupport {
             assertThat(saved.getLyricProgress()).isEqualTo(100);
             assertThat(saved.getLyricSections()).extracting(s -> s.getName()).containsExactly("サビ", "Cメロ");
             assertThat(saved.getLyricSections().get(0).getId()).isEqualTo(sabiId);
-            assertThat(saved.getChordSections()).singleElement().satisfies(c -> {
-                assertThat(c.getName()).isEqualTo("無題");
-                assertThat(c.getSectionKey()).isEqualTo("G");
-            });
             return null;
         });
+        mockMvc.perform(get("/songs/" + song.getId() + "/chord-chart").with(as(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sheet.data[0][1]").value("F"))
+                .andExpect(jsonPath("$.sheet.colWidths[0]").value(90));
+
+        // chordSheet を送らない（null）とコード譜は削除される
+        mockMvc.perform(post("/songs/" + song.getId() + "/save").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lyricSections\":[]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/songs/" + song.getId() + "/chord-chart").with(as(alice)))
+                .andExpect(jsonPath("$.sheet").doesNotExist());
     }
 }

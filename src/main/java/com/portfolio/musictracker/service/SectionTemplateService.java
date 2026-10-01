@@ -116,28 +116,24 @@ public class SectionTemplateService {
         for (SectionDto dto : sections) {
             String itemName = (dto.getName() == null || dto.getName().isBlank())
                     ? "無題" : dto.getName().trim();
-            String sectionKey = (template.getType() == SectionAreaType.CHORD)
-                    ? trimToNull(dto.getSectionKey()) : null;
-            template.addItem(new SectionTemplateItem(itemName, order++, dto.getContent(), sectionKey));
+            template.addItem(new SectionTemplateItem(itemName, order++, dto.getContent()));
         }
         if (template.getItems().isEmpty()) {
             throw new IllegalArgumentException("保存できるブロックがありません");
         }
     }
 
+    /** 対象エリアを解釈する。コード進行のテンプレート（CHORD）は廃止したため受け付けない。 */
     private SectionAreaType parseType(String type) {
+        SectionAreaType parsed;
         try {
-            return SectionAreaType.valueOf(type == null ? "" : type.trim().toUpperCase());
+            parsed = SectionAreaType.valueOf(type == null ? "" : type.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("不正なエリア種別です: " + type);
         }
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
+        if (parsed != SectionAreaType.LYRIC) {
+            throw new IllegalArgumentException("コード進行のテンプレートは廃止しました");
         }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        return parsed;
     }
 }

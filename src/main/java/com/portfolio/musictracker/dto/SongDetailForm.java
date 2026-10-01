@@ -1,13 +1,15 @@
 package com.portfolio.musictracker.dto;
 
+import com.portfolio.musictracker.chordchart.ChordSheet;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 作曲コア画面の「変更を保存」で送られてくる一括保存リクエスト。
  * <p>
- * 歌詞セクション・コードセクションはそれぞれ画面上の表示順で並んだ配列として送られ、
- * 配列の並び順がそのまま {@code sortOrder} になる。
+ * 歌詞セクションは画面上の表示順で並んだ配列として送られ、配列の並び順がそのまま {@code sortOrder} になる。
+ * コード譜は表のデータ全体（{@link ChordSheet}）を送る。null はコード譜なし（削除）を表す。
  */
 public class SongDetailForm {
 
@@ -19,16 +21,14 @@ public class SongDetailForm {
     private int arrangementProgress;
 
     private List<SectionDto> lyricSections = new ArrayList<>();
-    private List<SectionDto> chordSections = new ArrayList<>();
+    private ChordSheet chordSheet;
 
-    /** 1セクション分（歌詞 or コード）のデータ。 */
+    /** 歌詞セクション1件分のデータ。 */
     public static class SectionDto {
         /** 既存セクションのID。新規追加分は null。 */
         private Long id;
         private String name;
         private String content;
-        /** コードセクション個別の Key（転調用）。歌詞セクションでは未使用。 */
-        private String sectionKey;
 
         public Long getId() {
             return id;
@@ -52,14 +52,6 @@ public class SongDetailForm {
 
         public void setContent(String content) {
             this.content = content;
-        }
-
-        public String getSectionKey() {
-            return sectionKey;
-        }
-
-        public void setSectionKey(String sectionKey) {
-            this.sectionKey = sectionKey;
         }
     }
 
@@ -119,11 +111,11 @@ public class SongDetailForm {
         this.lyricSections = lyricSections;
     }
 
-    public List<SectionDto> getChordSections() {
-        return chordSections;
+    public ChordSheet getChordSheet() {
+        return chordSheet;
     }
 
-    public void setChordSections(List<SectionDto> chordSections) {
-        this.chordSections = chordSections;
+    public void setChordSheet(ChordSheet chordSheet) {
+        this.chordSheet = chordSheet;
     }
 }

@@ -2,6 +2,9 @@
 -- MusicTracker UI確認用サンプルデータ シードスクリプト
 -- 対象ユーザー: test / test@example.com / test1234
 --
+-- 事前にアプリを一度起動してテーブルを作成しておくこと。
+-- コード譜はデータに含めない（画面の「新規作成」でテンプレートから作れる）。
+--
 -- 実行方法（MySQL は docker-compose の music_tracker_db を想定）:
 --   docker exec -i music_tracker_db \
 --     mysql -utracker_user -ptracker_password --default-character-set=utf8mb4 \
@@ -38,7 +41,7 @@ INSERT IGNORE INTO tags (name) VALUES
 -- -----------------------------------------------------------------------------
 DELETE FROM song_tags      WHERE song_id IN (SELECT id FROM songs WHERE user_id = @uid);
 DELETE FROM lyric_sections WHERE song_id IN (SELECT id FROM songs WHERE user_id = @uid);
-DELETE FROM chord_sections WHERE song_id IN (SELECT id FROM songs WHERE user_id = @uid);
+DELETE FROM chord_charts   WHERE song_id IN (SELECT id FROM songs WHERE user_id = @uid);
 DELETE FROM songs          WHERE user_id = @uid;
 
 -- =============================================================================
@@ -183,25 +186,3 @@ INSERT INTO lyric_sections (song_id, name, sort_order, content) VALUES
   (@s6, '全体', 0, '雨上がりの放課後\n窓の外 虹がかかる\n君の横顔 そっと見てた\n言えなかった「好き」を抱えて'),
   -- 曲7: 未完成スケッチ
   (@s7, 'メモ', 0, 'ふんふんふん〜 ♪（鼻歌だけ録音済み）\nテーマ: 未定。明るい曲にするか暗い曲にするか迷い中。');
-
--- =============================================================================
--- 7) コード進行（chord_sections）
---    ディグリーネーム自動表示の確認用に代表的な進行を投入。
---    コードは半角スペース／改行区切り。section_key を入れると転調表示も確認可。
--- =============================================================================
-INSERT INTO chord_sections (song_id, name, sort_order, content, section_key) VALUES
-  -- 曲1: 王道進行 (IV-V-IIIm-VIm) in C
-  (@s1, 'サビ（王道進行）', 0, 'F G Em Am\nF G C C', NULL),
-  (@s1, 'Aメロ', 1, 'C G Am Em\nF C Dm G', NULL),
-  -- 曲2: 小室進行 (VIm-IV-V-I) in Am→C
-  (@s2, 'サビ（小室進行）', 0, 'Am F G C\nAm F G C', NULL),
-  -- 曲3: 丸の内サディスティック進行 in C（個別Keyを明示）
-  (@s3, 'サビ（丸サ進行）', 0, 'FM7 E7 Am7 Gm7 C7\nFM7 E7 Am7 D7 G7', 'C'),
-  (@s3, 'Aメロ', 1, 'FM7 G7 Em7 Am7\nDm7 G7 CM7 A7', 'C'),
-  -- 曲4: カノン進行 in G
-  (@s4, 'サビ（カノン進行）', 0, 'G D Em Bm\nC G C D', 'G'),
-  -- 曲5: F#m の疾走系（転調確認: 大サビでAメジャー扱い）
-  (@s5, 'サビ', 0, 'F#m D A E\nF#m D A E', 'F#m'),
-  (@s5, '大サビ（転調）', 1, 'A E F#m D\nA E D E', 'A'),
-  -- 曲6: 弾き語り D（カノン系）
-  (@s6, '全体', 0, 'D A Bm F#m\nG D G A', 'D');

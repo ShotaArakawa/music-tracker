@@ -131,8 +131,6 @@ body {
 .card-header.collapsible-header { display: flex; align-items: center; }
 .card-header.collapsible-header > .min-btn { margin-left: auto; }
 
-.chord-area { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-
 /* ---- 進捗の数値入力 ---- */
 .pct-input {
     width: 3.2rem;
@@ -158,77 +156,6 @@ body {
     min-width: 220px;
     display: none;
 }
-
-/* ---- ダイアトニックコード（リファレンス） ---- */
-.diatonic-panel { display: flex; flex-wrap: wrap; gap: .35rem; }
-.diatonic-chip {
-    border: 1px solid #d7e3f5;
-    background: #f3f8ff;
-    border-radius: .5rem;
-    padding: .2rem .5rem;
-    min-width: 3.4rem;
-    text-align: center;
-    line-height: 1.25;
-}
-.diatonic-chip .deg { display: block; font-size: .66rem; color: #6c8cc7; font-weight: 700; }
-.diatonic-chip .chord { display: block; font-weight: 700; color: #1b3a6b; }
-.diatonic-empty { color: #9aa3ad; font-size: .85rem; }
-
-/* ---- サークル・オブ・フィフス（五度圏） ---- */
-.cof {
-    position: relative;
-    width: 240px; height: 240px;
-    max-width: 100%;
-    margin: .3rem auto 0;
-}
-.cof-key {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 40px; height: 40px;
-    border: 1px solid #d7e3f5;
-    background: #fff;
-    border-radius: 50%;
-    font-size: .8rem; font-weight: 700;
-    color: #1b3a6b;
-    display: flex; align-items: center; justify-content: center;
-    padding: 0; line-height: 1;
-    cursor: pointer;
-    transition: background .12s, color .12s, box-shadow .12s, border-color .12s;
-}
-.cof-key.minor {
-    width: 33px; height: 33px;
-    font-size: .7rem;
-    background: #f3f8ff;
-    color: #5a76a8;
-}
-.cof-key:hover { border-color: #0d6efd; background: #eaf1ff; z-index: 2; }
-.cof-key.selected {
-    background: #0d6efd; color: #fff; border-color: #0d6efd;
-    box-shadow: 0 2px 10px rgba(13, 110, 253, .45);
-    z-index: 3;
-}
-.cof-center {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60px; text-align: center;
-    font-size: .6rem; color: #c2cad4; font-weight: 700;
-    pointer-events: none; user-select: none;
-}
-
-/* ---- セクション個別 Key（転調） ---- */
-.section-key {
-    flex: 0 0 auto;
-    width: 5.6rem;
-    font-size: .8rem;
-    padding: .1rem .45rem;
-    border: 1px solid #d7e3f5;
-    background: #f7faff;
-    border-radius: .4rem;
-    color: #1b3a6b;
-    font-weight: 700;
-}
-.section-key::placeholder { color: #9bb6d8; font-weight: 400; }
-.section-key:focus { outline: none; border-color: #0d6efd; background: #fff; }
 
 /* ---- Zen Mode（全画面） ---- */
 html.zen, body.zen { overflow: hidden; height: 100%; }
@@ -264,9 +191,6 @@ body.zen .panel.zen-active .section-body { min-height: 9rem; }
 body.zen #zen-float { display: flex; }
 #zen-float .zf-label { font-size: .68rem; color: #8a929b; font-weight: 700; margin-right: .25rem; }
 #zen-float .zf-val { font-weight: 700; color: #1b3a6b; }
-#zen-float .diatonic-panel { gap: .22rem; }
-#zen-float .diatonic-chip { padding: .04rem .35rem; min-width: auto; }
-#zen-float .diatonic-chip .deg { font-size: .58rem; }
 
 /* 全画面を閉じるボタン：一回り大きく・目立つ右上固定 */
 #zen-close {
@@ -278,74 +202,6 @@ body.zen #zen-float { display: flex; }
 }
 body.zen #zen-close { display: inline-flex; }
 
-#analysis-reopen { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 1700; display: none; }
-
-/* コード全画面の 2分割（入力 ⇄ 理論解析） */
-.chord-zen-wrap { display: block; }
-body.zen .panel[data-panel="chord"].zen-active .chord-zen-wrap {
-    display: flex; gap: 0; align-items: stretch;
-    flex: 1 1 auto; min-height: 0;
-}
-.chord-edit { min-width: 0; }
-body.zen .panel[data-panel="chord"].zen-active .chord-edit {
-    flex: 1 1 55%; overflow: auto; padding-right: .4rem; min-width: 12rem;
-}
-.chord-analysis { display: none; }
-body.zen .panel[data-panel="chord"].zen-active .chord-analysis.open {
-    display: block; flex: 1 1 45%; min-width: 12rem;
-    border-left: 1px solid #e3e6ea; padding-left: 1.2rem;
-    overflow: auto;
-}
-/* コード全画面の 2画面リサイズ用ガター（入力 ⇄ 解析の境界線） */
-.chord-gutter {
-    display: none;
-    flex: 0 0 12px;
-    cursor: col-resize;
-    align-self: stretch;
-    position: relative;
-}
-.chord-gutter.show { display: block; }
-.chord-gutter::before {
-    content: "";
-    position: absolute;
-    top: 0; bottom: 0; left: 50%;
-    width: 2px;
-    transform: translateX(-50%);
-    background: #d3d8de;
-    border-radius: 2px;
-}
-.chord-gutter:hover::before { background: #0d6efd; }
-.analysis-head {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: .6rem;
-}
-.analysis-section { margin-bottom: 1rem; }
-.analysis-section h4 { font-size: .8rem; color: #0d6efd; font-weight: 700; margin-bottom: .35rem; }
-.degree-cards { display: flex; flex-wrap: wrap; gap: .4rem; }
-
-/* 改行同期：左の入力欄の各行に対応する1行ぶんの度数表示 */
-.degree-lines { display: flex; flex-direction: column; gap: .35rem; }
-.degree-line {
-    display: flex; flex-wrap: wrap; gap: .4rem;
-    align-items: center;
-    min-height: 2.1rem;
-}
-.degree-line.is-blank { min-height: 1.1rem; }
-.degree-card {
-    border: 1px solid #e3e6ea; border-radius: .5rem;
-    padding: .3rem .55rem; text-align: center; min-width: 3.2rem; background: #fff;
-}
-.degree-card .chord { font-weight: 700; color: #1b3a6b; }
-.degree-card .deg { font-size: .7rem; color: #6c8cc7; font-weight: 700; }
-.degree-card.nondiatonic { background: #fff6f0; border-color: #f3d3bf; }
-.degree-card.nondiatonic .deg { color: #c2772f; }
-
-/* 解析側ヘッダーのセクション個別 Key バッジ */
-.analysis-section h4 .sec-key-badge {
-    font-size: .66rem; font-weight: 700; color: #6c8cc7;
-    background: #eef4ff; border: 1px solid #d7e3f5;
-    border-radius: .35rem; padding: 0 .35rem; margin-left: .4rem;
-}
 
 /* ---- テンプレート選択ポップオーバー ---- */
 .template-menu {
@@ -420,3 +276,37 @@ body.zen .panel[data-panel="chord"].zen-active .chord-analysis.open {
         box-shadow: 0 -2px 8px rgba(0,0,0,.08);
     }
 }
+
+/* ---- コード譜エディタ（Jspreadsheet） ---- */
+.chord-sheet { font-family: 'M PLUS Rounded 1c', sans-serif; }
+/* 罫線を引いていないマスは薄いグリッドだけ表示（テンプレートは枠線なし表示のため控えめに） */
+.chord-sheet .jss_worksheet > tbody > tr > td {
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    border-color: #f0f0f0;
+    padding: 0 4px;
+    /* Excel と同様、長い文字（セクション名など）は隣のマスにはみ出して表示する */
+    overflow: visible;
+}
+.chord-sheet .jss_worksheet > tbody > tr > td.jss_number { font-family: inherit; }
+.chart-empty {
+    border: 2px dashed #d7dde4; border-radius: .6rem;
+    padding: 1.5rem 1rem; text-align: center; color: #5c6670;
+    background: #fafbfc;
+}
+/* 新規作成・エクスポートのドロップダウン */
+.chart-menu-wrap { position: relative; }
+.chart-menu {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 1800;
+    min-width: 13rem; background: #fff;
+    border: 1px solid #dfe3e8; border-radius: .5rem;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .12); padding: .3rem;
+}
+.chart-menu.show { display: block; }
+.chart-menu button {
+    display: block; width: 100%; text-align: left;
+    border: 0; background: transparent; border-radius: .35rem;
+    padding: .4rem .6rem; font-size: .85rem;
+}
+.chart-menu button:hover { background: #eef4ff; color: #0d6efd; }
+/* 全画面時は表を画面いっぱいに使う */
+body.zen .panel[data-panel="chord"].zen-active .jss_content { max-height: calc(100vh - 9rem) !important; }

@@ -1,5 +1,6 @@
 package com.portfolio.musictracker.controller;
 
+import com.portfolio.musictracker.chordchart.ChordChartTemplate;
 import com.portfolio.musictracker.dto.FieldUpdateRequest;
 import com.portfolio.musictracker.dto.SongDetailForm;
 import com.portfolio.musictracker.entity.Song;
@@ -140,6 +141,7 @@ public class SongController {
     public String detail(@PathVariable Long id,
                          @AuthenticationPrincipal CustomUserDetails principal, Model model) {
         model.addAttribute("song", songService.findForDetail(id, principal.getUser()));
+        model.addAttribute("chordTemplates", ChordChartTemplate.values());
         return "songs/detail";
     }
 
@@ -150,11 +152,16 @@ public class SongController {
      */
     @PostMapping("/{id}/save")
     @ResponseBody
-    public Map<String, Object> saveDetail(@PathVariable Long id,
-                                          @RequestBody SongDetailForm form,
-                                          @AuthenticationPrincipal CustomUserDetails principal) {
-        songService.saveDetail(id, form, principal.getUser());
-        return Map.of("status", "ok");
+    public ResponseEntity<Map<String, Object>> saveDetail(@PathVariable Long id,
+                                                          @RequestBody SongDetailForm form,
+                                                          @AuthenticationPrincipal CustomUserDetails principal) {
+        try {
+            songService.saveDetail(id, form, principal.getUser());
+            return ResponseEntity.ok(Map.of("status", "ok"));
+        } catch (IllegalArgumentException e) {
+            // コード譜が大きすぎる等の入力不備
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** デモ音源のアップロード。保存後に詳細画面へ戻る。 */

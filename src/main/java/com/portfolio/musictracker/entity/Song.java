@@ -106,15 +106,10 @@ public class Song {
     /** 最後に詳細（作曲コア）画面を開いた日時。「最後に編集した曲」の特定に使う。 */
     private LocalDateTime lastOpenedAt;
 
-    /** 歌詞エリアのセクション。コードとは独立して並び順で管理する。 */
+    /** 歌詞エリアのセクション。並び順で管理する。 */
     @OneToMany(mappedBy = "song", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
     private List<LyricSection> lyricSections = new ArrayList<>();
-
-    /** コードエリアのセクション。歌詞とは独立して並び順で管理する。 */
-    @OneToMany(mappedBy = "song", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("sortOrder ASC")
-    private List<ChordSection> chordSections = new ArrayList<>();
 
     @CreationTimestamp
     @Column(updatable = false)
@@ -251,24 +246,10 @@ public class Song {
         this.lyricSections = lyricSections;
     }
 
-    public List<ChordSection> getChordSections() {
-        return chordSections;
-    }
-
-    public void setChordSections(List<ChordSection> chordSections) {
-        this.chordSections = chordSections;
-    }
-
     /** 歌詞セクションを末尾に追加し、双方向の関連を整える。 */
     public void addLyricSection(LyricSection section) {
         section.setSong(this);
         this.lyricSections.add(section);
-    }
-
-    /** コードセクションを末尾に追加し、双方向の関連を整える。 */
-    public void addChordSection(ChordSection section) {
-        section.setSong(this);
-        this.chordSections.add(section);
     }
 
     public String getAudioFilePath() {

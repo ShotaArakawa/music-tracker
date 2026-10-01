@@ -2,9 +2,14 @@
 <html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
     <th:block th:replace="~{fragments/head :: commonHead(${song.title} + ' - 作曲コア')}"></th:block>
+    <!-- コード譜エディタ（表計算）: Jspreadsheet CE と、テンプレートと同じフォント -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@5.12.0/dist/jsuites.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5.0.4/dist/jspreadsheet.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Icons&display=block">
     <link rel="stylesheet" th:href="@{/css/detail.css}">
 </head>
-<body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})}">
+<body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})},data-chord-url=@{/songs/{id}/chord-chart(id=${song.id})}">
 
 <!-- ===== スクロール追従ヘッダー（右上に一括保存ボタン） ===== -->
 <div class="core-header">
@@ -34,7 +39,7 @@
     <div class="d-md-none border-top">
         <div class="nav nav-tabs nav-fill" id="mobile-tab-nav" style="border-bottom: none;">
             <button type="button" class="nav-link active py-2" data-tab="lyric" style="border-radius: 0;">📝 歌詞</button>
-            <button type="button" class="nav-link py-2" data-tab="chord" style="border-radius: 0;">🎹 コード</button>
+            <button type="button" class="nav-link py-2" data-tab="chord" style="border-radius: 0;">🎼 コード譜</button>
             <button type="button" class="nav-link py-2" data-tab="info" style="border-radius: 0;">🎧 情報</button>
         </div>
     </div>
@@ -78,54 +83,54 @@
 
     <div class="gutter" data-gutter="0"></div>
 
-    <!-- 中央：コード -->
+    <!-- 中央：コード譜（Excel テンプレートを表計算エディタで直接編集） -->
     <section class="panel" data-panel="chord">
         <div class="area-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
-            <h2 class="h6 mb-0">🎹 コード進行</h2>
-            <div class="d-flex align-items-center gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary tpl-save-btn" data-area="chord"
-                        title="現在の構成をテンプレートとして保存">💾 構成を保存</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary tpl-apply-btn" data-area="chord"
-                        title="保存済みテンプレートを適用">📋 テンプレ適用</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="chord"
-                        title="全画面 + ディグリー解析">🔍 全画面（Zen Mode）</button>
-            </div>
-        </div>
-
-        <div class="chord-zen-wrap">
-            <!-- 入力側 -->
-            <div class="chord-edit">
-                <div class="section-list" data-area="chord">
-                    <div class="section-card" th:each="sec : ${song.chordSections}" th:attr="data-id=${sec.id}">
-                        <div class="section-head">
-                            <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
-                            <input class="section-name" type="text" th:value="${sec.name}" placeholder="セクション名">
-                            <input class="section-key" type="text" th:value="${sec.sectionKey}"
-                                   placeholder="Key" title="このセクションのKey（転調）。空なら曲全体のKeyを使用">
-                            <button type="button" class="btn-del" title="削除">×</button>
-                        </div>
-                        <textarea class="section-body chord-area form-control" rows="4"
-                                  placeholder="例: F - G - Em - Am" th:text="${sec.content}"></textarea>
+            <h2 class="h6 mb-0">🎼 コード譜</h2>
+            <div class="d-flex align-items-center gap-1 flex-wrap">
+                <div class="chart-menu-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-menu="chart-new-menu"
+                            title="白紙テンプレートから作成">＋ 新規作成 ▾</button>
+                    <div class="chart-menu" id="chart-new-menu">
+                        <button type="button" th:each="t : ${chordTemplates}"
+                                class="chart-new-btn" th:attr="data-template=${t.name()}"
+                                th:text="${t.label}">テンプレート</button>
                     </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-primary w-100 add-section" data-area="chord">
-                    ＋ セクション追加
-                </button>
-            </div>
-
-            <!-- 入力 ⇄ 解析のリサイズ用ガター（コード全画面時のみ表示） -->
-            <div class="chord-gutter" id="chord-gutter"></div>
-
-            <!-- 解析側（コード全画面時のみ表示） -->
-            <aside class="chord-analysis" id="chord-analysis">
-                <div class="analysis-head">
-                    <h3 class="h6 mb-0">🧠 ディグリーネーム解析</h3>
-                    <button type="button" class="btn-close" id="analysis-close"
-                            title="解析を閉じる" aria-label="解析を閉じる"></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="chart-import-btn"
+                        title="Excel（.xlsx / .xls）または PDF を読み込む">📥 インポート</button>
+                <input type="file" id="chart-import-file" accept=".xlsx,.xls,.pdf" hidden>
+                <div class="chart-menu-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-secondary chart-needs-sheet"
+                            data-menu="chart-export-menu" title="ファイルに書き出す">📤 エクスポート ▾</button>
+                    <div class="chart-menu" id="chart-export-menu">
+                        <button type="button" class="chart-export-btn" data-format="xlsx">Excel（.xlsx）</button>
+                        <button type="button" class="chart-export-btn" data-format="pdf">PDF</button>
+                    </div>
                 </div>
-                <div id="analysis-body"></div>
-            </aside>
+                <button type="button" class="btn btn-sm btn-outline-danger chart-needs-sheet" id="chart-clear-btn"
+                        title="このコード譜を削除（保存時に反映）">🗑</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="chord"
+                        title="このエリアを全画面表示">🔍 全画面（Zen Mode）</button>
+            </div>
         </div>
+
+        <!-- コード譜がまだない曲 -->
+        <div id="chart-empty" class="chart-empty" hidden>
+            <p class="mb-2">まだコード譜がありません。</p>
+            <div class="d-flex flex-wrap gap-2 justify-content-center mb-2">
+                <button type="button" th:each="t : ${chordTemplates}"
+                        class="btn btn-sm btn-primary chart-new-btn" th:attr="data-template=${t.name()}"
+                        th:text="${t.label} + 'で作成'">テンプレートで作成</button>
+            </div>
+            <p class="small text-muted mb-0">
+                手元の Excel / PDF を「📥 インポート」で読み込むこともできます。<br>
+                PDF は文字データを持つものだけ読み取れます（スキャン・手書きの PDF は不可）。
+            </p>
+        </div>
+        <div id="chart-loading" class="text-muted small p-3">読み込み中...</div>
+        <!-- 表計算エディタ（Jspreadsheet） -->
+        <div id="chord-sheet" class="chord-sheet"></div>
     </section>
 
     <div class="gutter" data-gutter="1"></div>
@@ -184,27 +189,13 @@
             </div>
         </div>
 
-        <!-- Key（サークル・オブ・フィフス）＆ ダイアトニック -->
+        <!-- Key -->
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
-                <span>🎼 Key &amp; ダイアトニック</span>
-                <span class="badge bg-primary" id="cof-current">未選択</span>
-            </div>
+            <div class="card-header bg-white fw-bold py-2">🎼 Key</div>
             <div class="card-body">
-                <!-- 五度圏（外＝メジャー / 内＝マイナー）。JSがボタンを配置する -->
-                <div id="cof" class="cof" role="group" aria-label="サークル・オブ・フィフス"></div>
-                <div class="d-flex justify-content-between align-items-center mt-2">
-                    <small class="text-muted">外＝メジャー / 内＝相対マイナー</small>
-                    <button type="button" id="cof-clear" class="btn btn-sm btn-outline-secondary py-0">クリア</button>
-                </div>
-                <!-- 既存の保存ロジック互換のため Key 値は hidden で保持 -->
-                <input type="hidden" id="musicKey" th:value="${song.musicKey}">
-
-                <hr class="my-2">
-                <div class="small fw-bold text-muted mb-1">選択キーのダイアトニックコード</div>
-                <div id="diatonic-panel" class="diatonic-panel">
-                    <span class="diatonic-empty">Key を選ぶと表示されます。</span>
-                </div>
+                <input type="text" id="musicKey" class="form-control form-control-sm" maxlength="20"
+                       th:value="${song.musicKey}" placeholder="例: C / Am / F#m">
+                <div class="form-text">コード譜をテンプレートから作るとき、見出しの Key 欄に入ります。</div>
             </div>
         </div>
 
@@ -291,21 +282,14 @@
     </aside>
 </div>
 
-<!-- Zen Mode：フローティング基本情報（常に BPM/Key/ダイアトニックを確認できる） -->
+<!-- Zen Mode：フローティング基本情報（常に BPM/Key を確認できる） -->
 <div id="zen-float">
     <span><span class="zf-label">BPM</span><span class="zf-val" id="zen-bpm">—</span></span>
     <span><span class="zf-label">KEY</span><span class="zf-val" id="zen-key">—</span></span>
-    <span class="d-flex align-items-center">
-        <span class="zf-label">DIATONIC</span>
-        <span id="zen-diatonic" class="diatonic-panel"></span>
-    </span>
 </div>
 
 <!-- Zen Mode：閉じるボタン（一回り大きく・右上固定） -->
 <button type="button" id="zen-close" class="btn btn-dark shadow">✕ 全画面を閉じる（Esc）</button>
-
-<!-- コード解析を閉じた後に再表示するボタン -->
-<button type="button" id="analysis-reopen" class="btn btn-primary btn-sm shadow">🧠 ディグリー解析を開く</button>
 
 <!-- 新規セクション用テンプレート -->
 <template id="section-template">
@@ -327,6 +311,8 @@
     <button type="button" id="save-all-mobile" class="btn btn-primary w-100 py-3">💾 変更を保存</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsuites@5.12.0/dist/jsuites.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5.0.4/dist/index.min.js"></script>
 <script th:src="@{/js/detail.js}"></script>
 </body>
 </html>

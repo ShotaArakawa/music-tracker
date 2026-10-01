@@ -65,29 +65,15 @@ document.querySelectorAll('.section-card').forEach(setupCard);
    ========================================================= */
 const template = document.getElementById('section-template');
 
-// カードを1枚生成して返す。コードエリアではセクション個別 Key 入力も付与する。
-// data = { name, content, sectionKey } で初期値を流し込める（テンプレ適用に使用）。
+// 歌詞カードを1枚生成して返す。
+// data = { name, content } で初期値を流し込める（テンプレ適用に使用）。
 function buildCard(area, data) {
     data = data || {};
     const node = template.content.firstElementChild.cloneNode(true);
-    const nameInput = node.querySelector('.section-name');
+    node.querySelector('.section-name').value = data.name || '';
     const body = node.querySelector('.section-body');
-    nameInput.value = data.name || '';
     body.value = data.content || '';
-    if (area === 'chord') {
-        body.classList.add('chord-area');
-        body.placeholder = '例: F - G - Em - Am';
-        // セクション個別 Key（転調用）の入力欄を名前の右に差し込む
-        const keyInput = document.createElement('input');
-        keyInput.type = 'text';
-        keyInput.className = 'section-key';
-        keyInput.placeholder = 'Key';
-        keyInput.title = 'このセクションのKey（転調）。空なら曲全体のKeyを使用';
-        keyInput.value = data.sectionKey || '';
-        nameInput.insertAdjacentElement('afterend', keyInput);
-    } else {
-        body.placeholder = '歌詞を入力...';
-    }
+    body.placeholder = '歌詞を入力...';
     setupCard(node);
     return node;
 }
@@ -208,15 +194,11 @@ function numOrNull(id) {
 
 function collectSections(area) {
     const list = getSectionList(area);
-    return [...list.querySelectorAll('.section-card')].map((card) => {
-        const keyEl = card.querySelector('.section-key');
-        return {
-            id: card.dataset.id ? parseInt(card.dataset.id, 10) : null,
-            name: card.querySelector('.section-name').value,
-            content: card.querySelector('.section-body').value,
-            sectionKey: keyEl ? keyEl.value : null
-        };
-    });
+    return [...list.querySelectorAll('.section-card')].map((card) => ({
+        id: card.dataset.id ? parseInt(card.dataset.id, 10) : null,
+        name: card.querySelector('.section-name').value,
+        content: card.querySelector('.section-body').value
+    }));
 }
 
 function gather() {
@@ -228,7 +210,7 @@ function gather() {
         melodyProgress: clampPct(parseInt(document.getElementById('melodyProgress').value, 10)),
         arrangementProgress: clampPct(parseInt(document.getElementById('arrangementProgress').value, 10)),
         lyricSections: collectSections('lyric'),
-        chordSections: collectSections('chord')
+        chordSheet: ChordEditor.getSheet()
     };
 }
 
@@ -242,17 +224,18 @@ saveBtn.addEventListener('click', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(gather())
-    }).then((res) => {
-        if (!res.ok) throw new Error('save failed');
-        return res.json();
-    }).then(() => {
+    }).then((res) => res.json().catch(() => ({})).then((data) => {
+        if (!res.ok) throw new Error(data.error || '保存に失敗しました。通信状況を確認してください。');
+        return data;
+    })).then(() => {
         // 新しく採番されたID等を反映するためリロード（リサイズ幅は localStorage で維持）
+        ChordEditor.markSaved();
         sessionStorage.setItem('mt-saved', '1');
         location.reload();
-    }).catch(() => {
+    }).catch((err) => {
         saveBtn.disabled = false;
         saveStatus.textContent = '';
-        alert('保存に失敗しました。通信状況を確認してください。');
+        alert(err.message);
     });
 });
 
@@ -273,341 +256,259 @@ if (sessionStorage.getItem('mt-saved')) {
 }
 
 /* =========================================================
-   6) 音楽理論エンジン（フロントエンドのみ・遅延なし）
+   6) コード譜エディタ（Excel テンプレートを表計算で直接編集）
+   ・テンプレートから作成 / Excel・PDF のインポート → 画面の表に読み込む（保存は「変更を保存」）
+   ・エクスポートは表示中の表をサーバーで Excel / PDF に変換してダウンロード
    ========================================================= */
-const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const FLAT_NAMES  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-const NAME_TO_PC = {
-    'C': 0, 'B#': 0, 'C#': 1, 'DB': 1, 'D': 2, 'D#': 3, 'EB': 3, 'E': 4, 'FB': 4,
-    'F': 5, 'E#': 5, 'F#': 6, 'GB': 6, 'G': 7, 'G#': 8, 'AB': 8, 'A': 9, 'A#': 10, 'BB': 10, 'B': 11, 'CB': 11
-};
-// メジャー／ナチュラルマイナーのスケール構成音（半音）と三和音の性質・度数表記
-const MAJOR = {
-    steps: [0, 2, 4, 5, 7, 9, 11],
-    quality: ['', 'm', 'm', '', '', 'm', 'dim'],
-    degree: ['I', 'IIm', 'IIIm', 'IV', 'V', 'VIm', 'VIIdim']
-};
-const MINOR = {
-    steps: [0, 2, 3, 5, 7, 8, 10],
-    quality: ['m', 'dim', '', 'm', 'm', '', ''],
-    degree: ['Im', 'IIdim', 'III', 'IVm', 'Vm', 'VI', 'VII']
-};
-// Key 起点からの半音間隔 → ローマ数字（非ダイアトニックも表現）
-const INTERVAL_ROMAN = ['I', 'bII', 'II', 'bIII', 'III', 'IV', '#IV', 'V', 'bVI', 'VI', 'bVII', 'VII'];
+const ChordEditor = (() => {
+    const BASE_URL = document.body.getAttribute('data-chord-url');
+    const container = document.getElementById('chord-sheet');
+    const emptyEl = document.getElementById('chart-empty');
+    const loadingEl = document.getElementById('chart-loading');
+    let worksheet = null;
+    // 未保存の変更があるか（ページを離れるときの確認に使う）
+    let dirty = false;
+    // 読み込み直後の行の高さ調整などを「変更」と数えないためのフラグ
+    let loading = false;
 
-function normalizeRoot(letter, accidental) {
-    const acc = accidental === '♯' ? '#' : accidental === '♭' ? 'b' : (accidental || '');
-    return letter.toUpperCase() + acc;
-}
-
-// "C Major" / "Am" / "F#m" / "D Minor" などを {root, minor} に解析
-function parseKey(str) {
-    if (!str) return null;
-    const m = str.trim().match(/^([A-Ga-g])([#b♯♭]?)\s*(.*)$/);
-    if (!m) return null;
-    const root = normalizeRoot(m[1], m[2]);
-    if (!(root.toUpperCase() in NAME_TO_PC)) return null;
-    const rest = m[3].toLowerCase().replace(/\s+/g, '');
-    let minor = false;
-    if (rest === '' || rest.startsWith('maj')) minor = false;
-    else if (rest.startsWith('min') || rest === 'm' || rest.startsWith('m')) minor = true;
-    return { root: root, minor: minor };
-}
-
-function pcOf(root) {
-    return NAME_TO_PC[root.toUpperCase()];
-}
-
-function noteName(pc, useFlat) {
-    return (useFlat ? FLAT_NAMES : SHARP_NAMES)[((pc % 12) + 12) % 12];
-}
-
-// Key のダイアトニックコード一覧を返す [{deg, chord}]
-function diatonicChords(key) {
-    const pc = pcOf(key.root);
-    const flatKeys = key.minor
-        ? ['D', 'G', 'C', 'F', 'Bb', 'Eb', 'Ab']
-        : ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb'];
-    const useFlat = key.root.includes('b') || flatKeys.includes(key.root);
-    const t = key.minor ? MINOR : MAJOR;
-    return t.steps.map((s, i) => ({
-        deg: t.degree[i],
-        chord: noteName(pc + s, useFlat) + t.quality[i]
-    }));
-}
-
-// テキストからコードトークンを抽出
-function extractChords(text) {
-    if (!text) return [];
-    const re = /[A-Ga-g][#b♯♭]?(?:maj7|maj9|maj|min|m7|m9|m6|m|dim7|dim|aug|sus2|sus4|sus|add\d+|°|\+|6|7|9|11|13|\/[A-Ga-g][#b]?)*/g;
-    return (text.match(re) || []).map((s) => s.trim()).filter(Boolean);
-}
-
-// 1つのコードを度数に解析
-function analyzeChord(token, key) {
-    const m = token.match(/^([A-Ga-g])([#b♯♭]?)(.*)$/);
-    if (!m) return null;
-    const root = normalizeRoot(m[1], m[2]);
-    if (!(root.toUpperCase() in NAME_TO_PC)) return null;
-    let rest = m[3];
-    // スラッシュコードの分母は除去して三和音性質だけ見る
-    rest = rest.split('/')[0];
-    const lower = rest.toLowerCase();
-    let suffix = '';
-    if (lower.startsWith('maj')) suffix = '';
-    else if (lower.startsWith('dim') || rest.includes('°')) suffix = 'dim';
-    else if (lower.startsWith('aug') || rest.includes('+')) suffix = 'aug';
-    else if (lower.startsWith('m') && !lower.startsWith('maj')) suffix = 'm';
-
-    const interval = ((pcOf(root) - pcOf(key.root)) % 12 + 12) % 12;
-    const roman = INTERVAL_ROMAN[interval];
-    const diatonic = !roman.includes('b') && !roman.includes('#');
-    return { chord: token, degree: roman + suffix, diatonic: diatonic };
-}
-
-function renderDiatonicInto(el, key) {
-    if (!key) {
-        el.innerHTML = '<span class="diatonic-empty">Key を設定すると表示されます。</span>';
-        return;
+    function markDirty() {
+        if (!loading) dirty = true;
     }
-    el.innerHTML = diatonicChords(key).map((d) =>
-        '<span class="diatonic-chip"><span class="deg">' + d.deg
-        + '</span><span class="chord">' + d.chord + '</span></span>'
-    ).join('');
-}
 
-// 1コードを度数カードHTMLに変換（sectionKey が null のときは「Key未設定」表示）
-function chordCardHtml(token, sectionKey) {
-    if (!sectionKey) {
-        return '<span class="degree-card"><span class="chord">' + escapeHtml(token)
-            + '</span><span class="deg">Key未設定</span></span>';
+    function showState() {
+        const has = !!worksheet;
+        emptyEl.hidden = has;
+        container.hidden = !has;
+        document.querySelectorAll('.chart-needs-sheet').forEach((b) => { b.disabled = !has; });
     }
-    const a = analyzeChord(token, sectionKey);
-    if (!a) return '';
-    return '<span class="degree-card ' + (a.diatonic ? '' : 'nondiatonic') + '">'
-        + '<span class="chord">' + escapeHtml(a.chord) + '</span>'
-        + '<span class="deg">' + a.degree + '</span></span>';
-}
 
-// コード解析パネルの再描画。
-// 各セクションは「個別 Key（転調）」があればそれを優先し、無ければ曲全体の Key を使う。
-// 左のコード入力欄と「行数・改行位置」を一致させるため、1行ずつ対応させて出力する。
-function renderAnalysis() {
-    const body = document.getElementById('analysis-body');
-    const songKey = parseKey(musicKeyInput.value);
-    const sections = [...document.querySelectorAll('.section-list[data-area="chord"] .section-card')];
-    let html = '';
-    sections.forEach((card) => {
-        const name = card.querySelector('.section-name').value || '無題';
-        const text = card.querySelector('.section-body').value || '';
-        // セクションにコードが1つも無ければ表示しない
-        if (!extractChords(text).length) return;
-        const keyEl = card.querySelector('.section-key');
-        const secKeyStr = keyEl ? keyEl.value.trim() : '';
-        const sectionKey = parseKey(secKeyStr) || songKey;
-        // 個別 Key が設定されている場合はバッジで明示（転調が一目で分かる）
-        const keyBadge = secKeyStr
-            ? '<span class="sec-key-badge">🎵 ' + escapeHtml(secKeyStr) + '</span>'
-            : '';
-        // 入力欄の改行で分割し、1行 = 1つの degree-line として描画
-        const linesHtml = text.split('\n').map((line) => {
-            const chords = extractChords(line);
-            if (!chords.length) {
-                // 空行（またはコードなし行）も1行ぶんの高さを確保して位置を合わせる
-                return '<div class="degree-line is-blank">&nbsp;</div>';
+    function destroy() {
+        if (worksheet) {
+            jspreadsheet.destroy(container);
+            worksheet = null;
+        }
+        container.innerHTML = '';
+    }
+
+    // サーバーの表データ（ChordSheet）をエディタに読み込む。sheet が null なら空の状態にする。
+    function load(sheet, changed) {
+        destroy();
+        loading = true;
+        if (sheet) {
+            const spreadsheet = jspreadsheet(container, {
+                toolbar: true,
+                worksheets: [{
+                    data: sheet.data,
+                    style: sheet.style,
+                    mergeCells: sheet.mergeCells,
+                    columns: sheet.colWidths.map((w) => ({ type: 'text', width: w, align: 'left' })),
+                    minDimensions: [sheet.colWidths.length, sheet.rowHeights.length],
+                    tableOverflow: true,
+                    tableWidth: '100%',
+                    tableHeight: '70vh',
+                    allowComments: false
+                }],
+                onchange: markDirty,
+                oninsertrow: markDirty,
+                ondeleterow: markDirty,
+                oninsertcolumn: markDirty,
+                ondeletecolumn: markDirty,
+                onmoverow: markDirty,
+                onmovecolumn: markDirty,
+                onresizerow: markDirty,
+                onresizecolumn: markDirty,
+                onmerge: markDirty,
+                onchangestyle: markDirty,
+                onpaste: markDirty,
+                onundo: markDirty,
+                onredo: markDirty
+            });
+            worksheet = spreadsheet[0];
+            // 行の高さは初期設定では反映されないため、読み込み後に1行ずつ設定する
+            sheet.rowHeights.forEach((h, i) => worksheet.setHeight(i, h));
+        }
+        loading = false;
+        dirty = !!changed;
+        loadingEl.hidden = true;
+        showState();
+    }
+
+    // エディタの内容をサーバーに送る形（ChordSheet）にする。コード譜がなければ null。
+    function getSheet() {
+        if (!worksheet) return null;
+        const data = worksheet.getData();
+        const heights = data.map((_, i) => parseInt(worksheet.getHeight(i), 10) || 0);
+        return {
+            data: data,
+            style: worksheet.getStyle(),
+            mergeCells: worksheet.getMerge(),
+            colWidths: worksheet.getWidth().map((w) => parseInt(w, 10) || 0),
+            rowHeights: heights
+        };
+    }
+
+    // JSON を返す API 呼び出し（エラー時はサーバーのメッセージで例外にする）
+    function requestJson(url, options) {
+        return fetch(url, options).then((res) => res.json().catch(() => ({})).then((body) => {
+            if (!res.ok) throw new Error(body.error || '処理に失敗しました。');
+            return body;
+        }));
+    }
+
+    function confirmReplace() {
+        return !worksheet || confirm('表示中のコード譜を置き換えます。よろしいですか？\n'
+            + '※「変更を保存」を押すまで保存されません。');
+    }
+
+    function createFromTemplate(name, label) {
+        if (!confirmReplace()) return;
+        requestJson(BASE_URL + '/template?name=' + encodeURIComponent(name), { method: 'POST' })
+            .then((sheet) => {
+                load(sheet, true);
+                showToast(label + 'で作成しました（「変更を保存」で保存）');
+            })
+            .catch((e) => alert(e.message));
+    }
+
+    function importFile(file) {
+        if (!confirmReplace()) return;
+        const form = new FormData();
+        form.append('file', file);
+        showToast('「' + file.name + '」を読み込んでいます...');
+        requestJson(BASE_URL + '/import', { method: 'POST', body: form })
+            .then((sheet) => {
+                load(sheet, true);
+                showToast('「' + file.name + '」を読み込みました（「変更を保存」で保存）');
+            })
+            .catch((e) => alert(e.message));
+    }
+
+    function fileNameFrom(disposition, format) {
+        const m = (disposition || '').match(/filename\*=UTF-8''([^;]+)/i);
+        return m ? decodeURIComponent(m[1]) : 'chord-chart.' + format;
+    }
+
+    function exportAs(format) {
+        const sheet = getSheet();
+        if (!sheet) return;
+        fetch(BASE_URL + '/export?format=' + format, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sheet)
+        }).then((res) => {
+            if (!res.ok) {
+                return res.json().catch(() => ({})).then((b) => {
+                    throw new Error(b.error || 'エクスポートに失敗しました。');
+                });
             }
-            const cards = chords.map((c) => chordCardHtml(c, sectionKey)).join('');
-            return '<div class="degree-line">' + cards + '</div>';
-        }).join('');
-        html += '<div class="analysis-section"><h4>' + escapeHtml(name) + keyBadge + '</h4>'
-            + '<div class="degree-lines">' + linesHtml + '</div></div>';
+            const name = fileNameFrom(res.headers.get('Content-Disposition'), format);
+            return res.blob().then((blob) => ({ blob: blob, name: name }));
+        }).then(({ blob, name }) => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }).catch((e) => alert(e.message));
+    }
+
+    function clear() {
+        if (!worksheet) return;
+        if (!confirm('このコード譜を削除します。よろしいですか？\n※「変更を保存」を押すと確定します。')) return;
+        destroy();
+        dirty = true;
+        showState();
+    }
+
+    // ---- ボタン・メニュー ----
+    document.querySelectorAll('[data-menu]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = document.getElementById(btn.getAttribute('data-menu'));
+            const open = !menu.classList.contains('show');
+            document.querySelectorAll('.chart-menu.show').forEach((m) => m.classList.remove('show'));
+            menu.classList.toggle('show', open);
+        });
     });
-    body.innerHTML = html || '<p class="diatonic-empty">コードを入力すると度数が表示されます。</p>';
-}
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.chart-menu.show').forEach((m) => m.classList.remove('show'));
+    });
+    document.querySelectorAll('.chart-new-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const label = btn.textContent.replace(/で作成$/, '').trim();
+            createFromTemplate(btn.getAttribute('data-template'), label);
+        });
+    });
+    document.querySelectorAll('.chart-export-btn').forEach((btn) => {
+        btn.addEventListener('click', () => exportAs(btn.getAttribute('data-format')));
+    });
+    const importInput = document.getElementById('chart-import-file');
+    document.getElementById('chart-import-btn').addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', () => {
+        if (importInput.files.length) importFile(importInput.files[0]);
+        importInput.value = '';
+    });
+    document.getElementById('chart-clear-btn').addEventListener('click', clear);
+
+    window.addEventListener('beforeunload', (e) => {
+        if (dirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    // 保存済みのコード譜を読み込む
+    requestJson(BASE_URL, {})
+        .then((body) => load(body.sheet, false))
+        .catch((e) => {
+            loadingEl.textContent = 'コード譜の読み込みに失敗しました: ' + e.message;
+        });
+
+    return {
+        getSheet: getSheet,
+        markSaved: () => { dirty = false; }
+    };
+})();
 
 function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;')
         .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// Key/BPM 変更時にすべての理論表示を更新
-const musicKeyInput = document.getElementById('musicKey');
-const bpmInput = document.getElementById('bpm');
-const cofCurrent = document.getElementById('cof-current');
-
-function updateTheory() {
-    const key = parseKey(musicKeyInput.value);
-    renderDiatonicInto(document.getElementById('diatonic-panel'), key);
-    renderDiatonicInto(document.getElementById('zen-diatonic'), key);
-    const label = musicKeyInput.value.trim();
-    document.getElementById('zen-key').textContent = label || '—';
-    document.getElementById('zen-bpm').textContent = bpmInput.value.trim() || '—';
-    if (cofCurrent) cofCurrent.textContent = label || '未選択';
-    highlightCof();
-    if (document.getElementById('chord-analysis').classList.contains('open')) {
-        renderAnalysis();
-    }
-}
-
-/* ---- サークル・オブ・フィフス（五度圏）UI ---- */
-// 時計回りの配置（上＝C）。外周＝メジャー、内周＝相対マイナー。
-const COF_MAJOR = ['C', 'G', 'D', 'A', 'E', 'B', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F'];
-const COF_MINOR = ['Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
-const cofEl = document.getElementById('cof');
-const cofButtons = [];
-
-function buildCircleOfFifths() {
-    if (!cofEl) return;
-    const size = 240, c = size / 2, rMajor = 96, rMinor = 56;
-    const frag = document.createDocumentFragment();
-
-    function place(label, value, radius, isMinor, i) {
-        const angle = (i * 30) * Math.PI / 180; // 0=上、時計回り
-        const x = c + radius * Math.sin(angle);
-        const y = c - radius * Math.cos(angle);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cof-key' + (isMinor ? ' minor' : '');
-        btn.textContent = label;
-        btn.dataset.key = value;
-        btn.title = value + (isMinor ? '（マイナー）' : '（メジャー）');
-        btn.style.left = x + 'px';
-        btn.style.top = y + 'px';
-        btn.addEventListener('click', () => selectKey(value));
-        frag.appendChild(btn);
-        cofButtons.push(btn);
-    }
-
-    COF_MAJOR.forEach((k, i) => place(k, k, rMajor, false, i));
-    COF_MINOR.forEach((k, i) => place(k, k, rMinor, true, i));
-
-    const center = document.createElement('div');
-    center.className = 'cof-center';
-    center.textContent = '五度圏';
-    cofEl.appendChild(frag);
-    cofEl.appendChild(center);
-}
-
-// ボタンクリックでKeyを選択（同じKeyの再クリックで解除）
-function selectKey(value) {
-    musicKeyInput.value = (musicKeyInput.value.trim() === value) ? '' : value;
-    updateTheory();
-}
-
-// 現在のKeyに一致するボタンを選択表示（異名同音も一致させる）
-function highlightCof() {
-    const cur = parseKey(musicKeyInput.value);
-    cofButtons.forEach((btn) => {
-        const bk = parseKey(btn.dataset.key);
-        const match = cur && bk && cur.minor === bk.minor && pcOf(cur.root) === pcOf(bk.root);
-        btn.classList.toggle('selected', !!match);
-    });
-}
-
-buildCircleOfFifths();
-const cofClear = document.getElementById('cof-clear');
-if (cofClear) {
-    cofClear.addEventListener('click', () => { musicKeyInput.value = ''; updateTheory(); });
-}
-bpmInput.addEventListener('input', updateTheory);
-
-const chordEdit = document.querySelector('.chord-edit');
-
-// コード入力・セクション名・セクション個別 Key のリアルタイム解析
-// （動的追加カードにも効くようイベント委譲）
-chordEdit.addEventListener('input', (e) => {
-    if (e.target.classList.contains('section-body')
-        || e.target.classList.contains('section-name')
-        || e.target.classList.contains('section-key')) {
-        if (document.getElementById('chord-analysis').classList.contains('open')) {
-            renderAnalysis();
-        }
-    }
-});
-
-/* ---- コード入力のハイフン自動補完（"F" → space → "F - "）----
-   快適性優先：直前がコード文字のときだけ " - " を挟む。
-   バックスペースや既存の区切り（- / 空白）は一切妨げない。 */
-chordEdit.addEventListener('keydown', (e) => {
-    if (e.key !== ' ' && e.key !== 'Spacebar') return;
-    const ta = e.target;
-    if (!ta.classList || !ta.classList.contains('section-body')) return;
-    // 範囲選択中・IME変換中は介入しない
-    if (ta.selectionStart !== ta.selectionEnd) return;
-    if (e.isComposing) return;
-    const pos = ta.selectionStart;
-    const before = ta.value.slice(0, pos);
-    // 直前がコードを構成しうる文字（英数・#・b・♯・♭・)）のときだけ補完
-    if (!/[A-Za-z0-9#b♯♭)]$/.test(before)) return;
-    e.preventDefault();
-    const after = ta.value.slice(pos);
-    const insert = ' - ';
-    ta.value = before + insert + after;
-    const caret = pos + insert.length;
-    ta.selectionStart = ta.selectionEnd = caret;
-    // value をスクリプトで書き換えると input が発火しないため明示的に再解析
-    if (document.getElementById('chord-analysis').classList.contains('open')) {
-        renderAnalysis();
-    }
-});
-
-updateTheory();
-
 /* =========================================================
    7) Zen Mode（全画面）
    ========================================================= */
-const analysisPane = document.getElementById('chord-analysis');
-const analysisReopen = document.getElementById('analysis-reopen');
-const chordGutter = document.getElementById('chord-gutter');
+const musicKeyInput = document.getElementById('musicKey');
+const bpmInput = document.getElementById('bpm');
+
+// 全画面時に右下へ出す BPM / Key を更新
+function updateZenInfo() {
+    document.getElementById('zen-key').textContent = musicKeyInput.value.trim() || '—';
+    document.getElementById('zen-bpm').textContent = bpmInput.value.trim() || '—';
+}
+musicKeyInput.addEventListener('input', updateZenInfo);
+bpmInput.addEventListener('input', updateZenInfo);
+updateZenInfo();
 
 function enterZen(area) {
     const panel = document.querySelector('.panel[data-panel="' + area + '"]');
     if (!panel) return;
     document.body.classList.add('zen', 'zen-' + area);
     panel.classList.add('zen-active');
-    if (area === 'chord') {
-        openAnalysis();
-    }
-    updateTheory();
+    updateZenInfo();
 }
 
 function exitZen() {
     document.querySelectorAll('.panel.zen-active').forEach((p) => p.classList.remove('zen-active'));
     document.body.classList.remove('zen', 'zen-lyric', 'zen-chord');
-    analysisReopen.style.display = 'none';
-    chordGutter.classList.remove('show');
-    // リサイズで付けたインライン幅をリセットし、次回はデフォルト比率に戻す
-    chordEdit.style.flexBasis = '';
-    chordEdit.style.flexGrow = '';
-    analysisPane.style.flexBasis = '';
-    analysisPane.style.flexGrow = '';
-}
-
-function openAnalysis() {
-    analysisPane.classList.add('open');
-    analysisReopen.style.display = 'none';
-    // コード Zen 中のみリサイズ用ガターを表示
-    if (document.body.classList.contains('zen-chord')) {
-        chordGutter.classList.add('show');
-    }
-    renderAnalysis();
-}
-
-function closeAnalysis() {
-    analysisPane.classList.remove('open');
-    chordGutter.classList.remove('show');
-    // コード Zen 中だけ「再表示」ボタンを出す
-    if (document.body.classList.contains('zen-chord')) {
-        analysisReopen.style.display = 'inline-flex';
-    }
 }
 
 document.querySelectorAll('.zen-btn').forEach((btn) => {
     btn.addEventListener('click', () => enterZen(btn.getAttribute('data-area')));
 });
 document.getElementById('zen-close').addEventListener('click', exitZen);
-document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
-analysisReopen.addEventListener('click', openAnalysis);
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.body.classList.contains('zen')) {
@@ -616,40 +517,10 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-/* ---- コード全画面の 2画面リサイズ（入力 ⇄ ディグリー解析） ---- */
-chordGutter.addEventListener('mousedown', (e) => {
-    if (!analysisPane.classList.contains('open')) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    const editStart = chordEdit.getBoundingClientRect().width;
-    const anaStart = analysisPane.getBoundingClientRect().width;
-    const MIN = 180;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-
-    function onMove(ev) {
-        let delta = ev.clientX - startX;
-        if (editStart + delta < MIN) delta = MIN - editStart;
-        if (anaStart - delta < MIN) delta = anaStart - MIN;
-        chordEdit.style.flexGrow = '0';
-        chordEdit.style.flexBasis = (editStart + delta) + 'px';
-        analysisPane.style.flexGrow = '0';
-        analysisPane.style.flexBasis = (anaStart - delta) + 'px';
-    }
-    function onUp() {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-});
-
 /* =========================================================
    8) セクション構成テンプレート（保存・適用・名前変更・上書き・削除）
    ========================================================= */
-const AREA_LABEL = { lyric: '歌詞', chord: 'コード' };
+const AREA_LABEL = { lyric: '歌詞' };
 
 // テンプレ一覧ポップオーバー（1つを使い回す）
 const tplMenu = document.createElement('div');
@@ -820,10 +691,6 @@ function applyTemplateById(area, id) {
             const list = getSectionList(area);
             list.innerHTML = '';
             sections.forEach((s) => list.appendChild(buildCard(area, s)));
-            if (area === 'chord'
-                && document.getElementById('chord-analysis').classList.contains('open')) {
-                renderAnalysis();
-            }
             showToast('テンプレート「' + (data.name || '') + '」を適用しました');
         })
         .catch(() => alert('テンプレートの適用に失敗しました。'));

@@ -125,7 +125,6 @@ public class TemplateController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", item.getName());
         m.put("content", item.getContent() == null ? "" : item.getContent());
-        m.put("sectionKey", item.getSectionKey() == null ? "" : item.getSectionKey());
         return m;
     }
 }

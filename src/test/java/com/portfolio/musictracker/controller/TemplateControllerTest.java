@@ -20,8 +20,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TemplateControllerTest extends IntegrationTestSupport {
 
     private SectionTemplate createTemplate(User owner, String name) {
-        SectionTemplate t = new SectionTemplate(name, SectionAreaType.CHORD, owner);
-        t.addItem(new SectionTemplateItem("サビ", 0, "F G Em Am", "C"));
+        SectionTemplate t = new SectionTemplate(name, SectionAreaType.LYRIC, owner);
+        t.addItem(new SectionTemplateItem("サビ", 0, "夜明けよ来い"));
         return templateRepository.save(t);
     }
 
@@ -29,12 +29,12 @@ class TemplateControllerTest extends IntegrationTestSupport {
     void 保存したテンプレートは作成者のものになり一覧に出る() throws Exception {
         mockMvc.perform(post("/templates").with(as(alice)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"王道\",\"type\":\"CHORD\",\"sections\":[{\"name\":\"サビ\",\"content\":\"C\"}]}"))
+                        .content("{\"name\":\"王道\",\"type\":\"LYRIC\",\"sections\":[{\"name\":\"サビ\",\"content\":\"C\"}]}"))
                 .andExpect(status().isOk());
 
         assertThat(templateRepository.findAll()).singleElement()
                 .satisfies(t -> assertThat(t.isOwnedBy(alice)).isTrue());
-        mockMvc.perform(get("/templates").param("type", "CHORD").with(as(alice)))
+        mockMvc.perform(get("/templates").param("type", "LYRIC").with(as(alice)))
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].shared").value(false));
     }
@@ -43,7 +43,7 @@ class TemplateControllerTest extends IntegrationTestSupport {
     void 他人のテンプレートは一覧に出ず取得も変更もできない() throws Exception {
         Long id = createTemplate(alice, "aliceの").getId();
 
-        mockMvc.perform(get("/templates").param("type", "CHORD").with(as(bob)))
+        mockMvc.perform(get("/templates").param("type", "LYRIC").with(as(bob)))
                 .andExpect(jsonPath("$", hasSize(0)));
         mockMvc.perform(get("/templates/" + id).with(as(bob)))
                 .andExpect(status().isForbidden());
@@ -79,12 +79,12 @@ class TemplateControllerTest extends IntegrationTestSupport {
     void 共有テンプレートは全員が適用できるが変更はできない() throws Exception {
         Long id = createTemplate(null, "共有").getId();
 
-        mockMvc.perform(get("/templates").param("type", "CHORD").with(as(bob)))
+        mockMvc.perform(get("/templates").param("type", "LYRIC").with(as(bob)))
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].shared").value(true));
         mockMvc.perform(get("/templates/" + id).with(as(bob)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sections[0].content").value("F G Em Am"));
+                .andExpect(jsonPath("$.sections[0].content").value("夜明けよ来い"));
         mockMvc.perform(delete("/templates/" + id).with(as(bob)).with(csrf()))
                 .andExpect(status().isForbidden());
     }

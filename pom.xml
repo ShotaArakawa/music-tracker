@@ -78,6 +78,20 @@
             </exclusions>
         </dependency>
 
+        <!-- コード譜の Excel 読み書き -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.5.1</version>
+        </dependency>
+
+        <!-- コード譜の PDF 出力・読み取り -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.8</version>
+        </dependency>
+
         <!-- 開発時の自動リロード -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,9 +1,9 @@
 package com.portfolio.musictracker.service;
 
+import com.portfolio.musictracker.chordchart.ChordChartService;
 import com.portfolio.musictracker.dto.SongDetailForm;
 import com.portfolio.musictracker.dto.SongDetailForm.SectionDto;
 import com.portfolio.musictracker.entity.AbstractSection;
-import com.portfolio.musictracker.entity.ChordSection;
 import com.portfolio.musictracker.entity.LyricSection;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.Status;
@@ -40,12 +40,14 @@ public class SongService {
     private final SongRepository songRepository;
     private final TagRepository tagRepository;
     private final AudioStorage audioStorage;
+    private final ChordChartService chordChartService;
 
     public SongService(SongRepository songRepository, TagRepository tagRepository,
-                       AudioStorage audioStorage) {
+                       AudioStorage audioStorage, ChordChartService chordChartService) {
         this.songRepository = songRepository;
         this.tagRepository = tagRepository;
         this.audioStorage = audioStorage;
+        this.chordChartService = chordChartService;
     }
 
     /**
@@ -174,6 +176,7 @@ public class SongService {
     public void deleteById(Long id, User user) {
         Song song = findOwned(id, user);
         String audio = song.getAudioFilePath();
+        chordChartService.deleteBySong(song);
         songRepository.delete(song);
         if (audio != null) {
             afterCommit(() -> audioStorage.delete(audio));
@@ -262,13 +265,6 @@ public class SongService {
             }
             seeded = true;
         }
-        if (song.getChordSections().isEmpty()) {
-            String[] defaults = {"Intro", "Aメロ", "Bメロ", "サビ"};
-            for (int i = 0; i < defaults.length; i++) {
-                song.addChordSection(new ChordSection(song, defaults[i], i));
-            }
-            seeded = true;
-        }
         if (seeded) {
             songRepository.save(song);
         }
@@ -277,8 +273,8 @@ public class SongService {
 
     /**
      * 作曲コア画面の「変更を保存」を一括で反映する。
-     * 基本情報・世界観・進捗に加え、歌詞／コードの各セクションの
-     * 追加・削除・並び替え・名前変更・本文編集をまとめて保存する。
+     * 基本情報・世界観・進捗、歌詞セクションの追加・削除・並び替え・名前変更・本文編集、
+     * コード譜（表）をまとめて保存する。
      */
     @Transactional
     public void saveDetail(Long id, SongDetailForm form, User user) {
@@ -293,10 +289,9 @@ public class SongService {
 
         reconcileSections(song, song.getLyricSections(), form.getLyricSections(),
                 (s, order) -> new LyricSection(s, "", order));
-        reconcileSections(song, song.getChordSections(), form.getChordSections(),
-                (s, order) -> new ChordSection(s, "", order));
 
         songRepository.save(song);
+        chordChartService.save(song, form.getChordSheet());
     }
 
     /**
@@ -336,10 +331,6 @@ public class SongService {
             section.setName(normalizeName(dto.getName()));
             section.setContent(dto.getContent());
             section.setSortOrder(order);
-            // コードセクションのみ、セクション個別 Key（転調）を反映する
-            if (section instanceof ChordSection chord) {
-                chord.setSectionKey(trimToNull(dto.getSectionKey()));
-            }
             order++;
         }
     }

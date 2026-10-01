@@ -1,6 +1,6 @@
 # 🎵 作曲トラッカー（Music Tracker）
 
-作曲の進捗・歌詞・コード進行・デモ音源をひとつの場所で管理できる、作曲家向けWebアプリケーションです。
+作曲の進捗・歌詞・コード譜・デモ音源をひとつの場所で管理できる、作曲家向けWebアプリケーションです。
 
 🔗 **URL**: [music-tracker-105d.onrender.com](https://music-tracker-105d.onrender.com)
 
@@ -18,17 +18,16 @@
 
 ### スタジオ（詳細編集）
 
-- 歌詞とコード進行を**セクション単位**（Aメロ / Bメロ / サビ など）で並列編集
-- セクションのドラッグ＆ドロップ並び替え
-- 歌詞・コード構成をテンプレートとして保存・再利用
-- 全画面モード（Zen Mode）でそれぞれ集中編集
+- 歌詞を**セクション単位**（Aメロ / Bメロ / サビ など）で編集・ドラッグ＆ドロップで並び替え
+- 歌詞の構成をテンプレートとして保存・再利用
+- 歌詞・コード譜・曲情報を3ペインで並べて編集、全画面モード（Zen Mode）で集中編集
 
-### コード進行支援
+### コード譜（Excel テンプレートをそのまま編集）
 
-- セクションごとにキー（Key）を設定
-- **ディグリーネーム解析**：入力したコードをスケール上の度数（I / IIm / IIIm...）に自動変換
-- **五度圏サークル**でキー選択をビジュアルサポート
-- ダイアトニックコード一覧をリアルタイム表示
+- コード譜テンプレート（① 1小節2マス / ② 1小節4マス）を**表計算エディタで直接編集**（罫線・色・結合・列幅も Excel と同じ見た目）
+- テンプレートから作ると、曲名・Key・BPM を見出しに自動で記入
+- **インポート**：Excel（.xlsx / .xls）は書式ごとそのまま反映。PDF は文字データから表に並べて取り込み
+- **エクスポート**：Excel（.xlsx）と PDF（A4・1ページ幅に自動縮小）。書き出した PDF はインポートすると書式ごと完全に復元
 
 ### デモ音源・BPM・世界観管理
 
@@ -54,6 +53,7 @@
 | DB操作         | Spring Data JPA / Hibernate             |
 | データベース   | MySQL 8.0                               |
 | フロントエンド | Bootstrap 5.3 / Vanilla JS              |
+| コード譜       | Jspreadsheet CE（表計算エディタ）/ Apache POI（Excel）/ Apache PDFBox（PDF） |
 | インフラ       | Docker / Docker Compose                 |
 | デプロイ       | Render（PaaS）                          |
 
@@ -61,23 +61,24 @@
 
 ## 🏗 設計の工夫
 
-### セクションの抽象化（継承設計）
+### コード譜：画面・Excel・PDF を1つのデータ形式でつなぐ
 
-歌詞セクションとコードセクションは構造が似ているため、`AbstractSection` を親クラスとして共通フィールド（曲ID・セクション名・表示順）を持たせ、`LyricSection` と `ChordSection` で継承しています。これにより、ドラッグ＆ドロップの並び替えロジックを共通化できました。
+コード譜は、画面の表計算エディタ（Jspreadsheet）が扱う形（セルの値・セルごとの CSS・結合・列幅・行の高さ）をそのまま `ChordSheet` として JSON で保存しています。Excel / PDF との変換はサーバー側でこの形を起点に行います。
 
 ```
-AbstractSection
-├── LyricSection  （歌詞テキスト）
-└── ChordSection  （コード文字列 + キー情報）
+             ┌─ ChordSheetExcelConverter（Apache POI）── .xlsx / .xls
+ChordSheet ──┼─ ChordSheetPdfRenderer   （PDFBox）──── PDF（元の .xlsx を添付）
+（画面と同じ形）└─ ChordSheetPdfImporter   （PDFBox）──── 添付 .xlsx から完全復元 / 文字の位置から表を推定
 ```
+
+- 書式は `CellStyleCss` で「Excel の書式 ⇄ CSS」を相互変換（色・太字・文字サイズ・配置・罫線）
+- PDF はテンプレートと同じ M PLUS Rounded 1c で描画し、収録外の文字は IPAex ゴシックで補う
+- スキャン画像・手書きの PDF は文字データがないため取り込めません（エラーで案内）
+- 旧仕様の「コード進行」データは、起動時に一度だけコード譜へ変換して旧テーブルを削除します（`LegacyChordMigration`）
 
 ### インライン編集と自動保存
 
 曲一覧の各セルをクリックするとその場で編集できます。`contenteditable` と `blur` イベントを組み合わせ、編集完了時に Ajax（fetch）でサーバーに保存する仕組みにしました。画面遷移なしに更新できるためUXが向上しています。
-
-### ディグリーネーム解析
-
-コード名（例：`C#m7`）とキー情報からスケール上の度数を計算するロジックを、ブラウザ側の JavaScript（`songs/detail.html`）で実装しています。入力のたびにサーバーと通信せずに即時表示できます。半音の対応テーブルを持ち、ノンダイアトニックコード（例：Key=D で `C` → `bVII`）も判定します。
 
 ### 権限と安全性
 
@@ -105,6 +106,14 @@ AbstractSection
 ```
 src/main/
 ├── java/com/portfolio/musictracker/
+│   ├── chordchart/                    # コード譜
+│   │   ├── ChordSheet.java            # 表データ（画面・保存・変換の共通形式）
+│   │   ├── CellStyleCss.java          # Excel の書式 ⇄ CSS
+│   │   ├── ChordSheetExcelConverter.java # Excel 読み書き
+│   │   ├── ChordSheetPdfRenderer.java # PDF 出力
+│   │   ├── ChordSheetPdfImporter.java # PDF 読み取り
+│   │   ├── ChordChartController.java  # 作成・インポート・エクスポート API
+│   │   └── LegacyChordMigration.java  # 旧コード進行データの移行
 │   ├── config/
 │   │   └── DataInitializer.java       # 初期データ投入
 │   ├── controller/
@@ -119,8 +128,7 @@ src/main/
 │   │   ├── Song.java                  # 曲エンティティ
 │   │   ├── AbstractSection.java       # セクション共通（継承元）
 │   │   ├── LyricSection.java          # 歌詞セクション
-│   │   ├── ChordSection.java          # コードセクション
-│   │   ├── SectionTemplate.java       # 構成テンプレート
+│   │   ├── SectionTemplate.java       # 歌詞の構成テンプレート
 │   │   └── User.java                  # ユーザー
 │   ├── repository/                    # Spring Data JPA リポジトリ
 │   ├── security/
@@ -141,7 +149,9 @@ src/main/
     │   ├── fragments/head.html        # 共通headタグ
     │   ├── auth/                      # ログイン・新規登録
     │   └── songs/                     # 曲一覧・スタジオ・カレンダー
-    └── static/                        # 静的リソース（アイコン・PWA）
+    ├── chord-templates/               # コード譜の白紙テンプレート（Excel）
+    ├── fonts/                         # PDF 用フォント（M PLUS Rounded 1c / IPAex ゴシック）とライセンス
+    └── static/                        # 静的リソース（CSS・JS・アイコン・PWA）
 ```
 
 ---
