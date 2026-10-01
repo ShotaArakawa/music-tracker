@@ -5,9 +5,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -40,6 +43,14 @@ public class SectionTemplate {
     @Column(nullable = false, length = 10)
     private SectionAreaType type;
 
+    /**
+     * 作成したユーザー。null は持ち主のいない共有テンプレート
+     * （マルチユーザー化前に作られたもの）で、全員が閲覧・適用のみ可能。
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     /** テンプレートを構成する各ブロック。並び順で保持する。 */
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
@@ -52,9 +63,23 @@ public class SectionTemplate {
     public SectionTemplate() {
     }
 
-    public SectionTemplate(String name, SectionAreaType type) {
+    public SectionTemplate(String name, SectionAreaType type, User user) {
         this.name = name;
         this.type = type;
+        this.user = user;
+    }
+
+    /** 指定ユーザーが作成したテンプレートか。共有テンプレート（user が null）は誰のものでもない。 */
+    public boolean isOwnedBy(User other) {
+        return user != null && other != null && user.getId().equals(other.getId());
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     /** ブロックを末尾に追加し、双方向の関連を整える。 */

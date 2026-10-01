@@ -1479,12 +1479,14 @@
                 '<div class="tm-row" data-id="' + t.id + '" data-name="' + escapeHtml(t.name) + '">'
                 + '<button type="button" class="tm-item" data-act="apply">'
                 + '<span>' + escapeHtml(t.name) + '</span>'
-                + '<span class="tm-count">' + t.count + 'ブロック</span></button>'
-                + '<span class="tm-actions">'
+                + '<span class="tm-count">' + (t.shared ? '共有・' : '') + t.count + 'ブロック</span></button>'
+                // 共有テンプレートは閲覧・適用のみ（名前変更・上書き・削除はできない）
+                + (t.shared ? '' : '<span class="tm-actions">'
                 + '<button type="button" class="tm-act" data-act="rename" title="名前を変更">✏️</button>'
                 + '<button type="button" class="tm-act" data-act="overwrite" title="現在の構成で上書き保存">⬆️</button>'
                 + '<button type="button" class="tm-act" data-act="delete" title="削除">🗑️</button>'
-                + '</span></div>'
+                + '</span>')
+                + '</div>'
             ).join('');
         }
         tplMenu.innerHTML = html;
