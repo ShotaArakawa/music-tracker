@@ -9,6 +9,10 @@ import com.portfolio.musictracker.security.CustomUserDetails;
 import com.portfolio.musictracker.service.ScheduleService;
 import com.portfolio.musictracker.service.SongService;
 import jakarta.validation.Valid;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
@@ -155,6 +159,26 @@ public class SongController {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/songs/" + id;
+    }
+
+    /**
+     * デモ音源の再生用配信。所有者だけが取得できる。
+     * Resource を返すと Spring MVC が Range リクエスト（シーク再生）にも対応する。
+     */
+    @GetMapping("/{id}/audio")
+    public ResponseEntity<Resource> audio(@PathVariable Long id,
+                                          @AuthenticationPrincipal CustomUserDetails principal) {
+        try {
+            Resource resource = songService.loadAudio(id, principal.getUser());
+            MediaType type = MediaTypeFactory.getMediaType(resource)
+                    .orElse(MediaType.APPLICATION_OCTET_STREAM);
+            return ResponseEntity.ok()
+                    .contentType(type)
+                    .cacheControl(CacheControl.noCache().cachePrivate())
+                    .body(resource);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     // ===== 一覧画面のインライン編集（Ajax） =====

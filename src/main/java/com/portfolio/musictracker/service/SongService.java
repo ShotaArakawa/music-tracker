@@ -11,6 +11,7 @@ import com.portfolio.musictracker.entity.Tag;
 import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.repository.SongRepository;
 import com.portfolio.musictracker.repository.TagRepository;
+import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -142,6 +143,12 @@ public class SongService {
             audioStorageService.delete(previous);
         }
         return saved;
+    }
+
+    /** 曲に紐づくデモ音源を読み出す（所有者のみ）。 */
+    public Resource loadAudio(Long id, User user) {
+        Song song = findOwned(id, user);
+        return audioStorageService.load(song.getAudioFilePath());
     }
 
     @Transactional

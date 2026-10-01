@@ -573,7 +573,7 @@
                 <!-- 既存音源のプレイヤー -->
                 <div th:if="${song.audioFilePath != null}" class="mb-2">
                     <audio controls class="w-100"
-                           th:src="@{/audio/{f}(f=${song.audioFilePath})}">
+                           th:src="@{/songs/{id}/audio(id=${song.id}, v=${song.audioFilePath})}">
                         お使いのブラウザは audio タグに対応していません。
                     </audio>
                 </div>

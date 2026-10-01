@@ -1,6 +1,8 @@
 package com.portfolio.musictracker.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -83,8 +85,15 @@ public class AudioStorageService {
         }
     }
 
-    /** 保存ディレクトリ（静的配信の設定に使う）。 */
-    public Path getUploadDir() {
-        return uploadDir;
+    /** 保存済みファイルを読み出す。見つからなければ例外。 */
+    public Resource load(String storedName) {
+        if (!StringUtils.hasText(storedName)) {
+            throw new IllegalArgumentException("音源が登録されていません");
+        }
+        Path target = uploadDir.resolve(storedName).normalize();
+        if (!target.startsWith(uploadDir) || !Files.isReadable(target)) {
+            throw new IllegalArgumentException("音源ファイルが見つかりません");
+        }
+        return new FileSystemResource(target);
     }
 }
