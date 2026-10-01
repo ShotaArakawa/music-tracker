@@ -15,6 +15,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -136,11 +138,20 @@ public class SongService {
     public Song updateAudio(Long id, MultipartFile file, User user) {
         Song song = findOwned(id, user);
         String stored = audioStorageService.store(file, id);
+        // DB 更新がロールバックされたら、保存したばかりのファイルを片付ける
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    audioStorageService.delete(stored);
+                }
+            }
+        });
         String previous = song.getAudioFilePath();
         song.setAudioFilePath(stored);
         Song saved = songRepository.save(song);
         if (previous != null && !previous.equals(stored)) {
-            audioStorageService.delete(previous);
+            afterCommit(() -> audioStorageService.delete(previous));
         }
         return saved;
     }
@@ -151,10 +162,25 @@ public class SongService {
         return audioStorageService.load(song.getAudioFilePath());
     }
 
+    /** 曲を削除する。デモ音源ファイルも DB のコミット後に削除する。 */
     @Transactional
     public void deleteById(Long id, User user) {
         Song song = findOwned(id, user);
+        String audio = song.getAudioFilePath();
         songRepository.delete(song);
+        if (audio != null) {
+            afterCommit(() -> audioStorageService.delete(audio));
+        }
+    }
+
+    /** トランザクションのコミット後に処理を実行する（ロールバック時はファイルを消さない）。 */
+    private void afterCommit(Runnable action) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 
     /**
