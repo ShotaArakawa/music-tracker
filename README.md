@@ -77,7 +77,20 @@ AbstractSection
 
 ### ディグリーネーム解析
 
-コード名（例：`C#m7`）とキー情報からスケール上の度数を計算するロジックをサーバーサイドのJavaで実装しています。半音の対応テーブルを持ち、ノンダイアトニックコード（例：`Cdim` → `bVIIdim`）も判定します。
+コード名（例：`C#m7`）とキー情報からスケール上の度数を計算するロジックを、ブラウザ側の JavaScript（`songs/detail.html`）で実装しています。入力のたびにサーバーと通信せずに即時表示できます。半音の対応テーブルを持ち、ノンダイアトニックコード（例：Key=D で `C` → `bVII`）も判定します。
+
+### 権限と安全性
+
+- 曲・デモ音源・構成テンプレートは作成したユーザーだけが参照・変更できます（サービス層で所有者を確認）
+- デモ音源は静的公開せず、所有者確認つきのエンドポイント（`GET /songs/{id}/audio`）から配信します
+- CSRF 対策を有効にしており、フォームは hidden の `_csrf`、Ajax（fetch）はヘッダーでトークンを送ります
+
+### デモ音源の保存先の切り替え
+
+`AudioStorage` インターフェースで保存先を抽象化し、環境変数で切り替えます。
+
+- `local`：サーバーのディスク（ローカル開発用）
+- `s3`：Cloudflare R2 などの S3 互換ストレージ。再生時は短時間だけ有効な署名付き URL にリダイレクトし、ストレージから直接配信します
 
 ### スマホ対応
 
@@ -93,8 +106,7 @@ AbstractSection
 src/main/
 ├── java/com/portfolio/musictracker/
 │   ├── config/
-│   │   ├── DataInitializer.java       # 初期データ投入
-│   │   └── WebConfig.java             # MVC設定
+│   │   └── DataInitializer.java       # 初期データ投入
 │   ├── controller/
 │   │   ├── LandingController.java     # GET / → LP or リダイレクト
 │   │   ├── SongController.java        # 曲一覧・インライン編集
@@ -114,11 +126,15 @@ src/main/
 │   ├── security/
 │   │   ├── SecurityConfig.java        # 認証・認可設定
 │   │   └── CustomUserDetailsService.java
-│   └── service/
-│       ├── SongService.java           # 曲ビジネスロジック
-│       ├── AudioStorageService.java   # 音源ファイル管理
-│       ├── ScheduleService.java       # 納期チェック
-│       └── UserService.java
+│   ├── service/
+│   │   ├── SongService.java           # 曲ビジネスロジック
+│   │   ├── SectionTemplateService.java # 構成テンプレート
+│   │   ├── ScheduleService.java       # 納期チェック
+│   │   └── UserService.java
+│   └── storage/
+│       ├── AudioStorage.java          # 音源の保存先（インターフェース）
+│       ├── LocalAudioStorage.java     # ディスク保存
+│       └── S3AudioStorage.java        # Cloudflare R2 / S3 互換ストレージ
 └── resources/
     ├── templates/
     │   ├── landing.html               # ランディングページ
@@ -156,6 +172,15 @@ java -jar target/music-tracker-0.0.1-SNAPSHOT.jar
 ```
 
 起動後、[http://localhost:8080](http://localhost:8080) にアクセスするとランディングページが表示されます。
+ローカルではユーザーが1人もいない場合に初期ユーザー `demo` / `demo1234` が作成されます（本番では作成しません）。
+
+### テスト
+
+```bash
+~/.local/maven/apache-maven-3.9.16/bin/mvn test
+```
+
+テストはインメモリ DB（H2）で動くため、MySQL の起動は不要です。
 
 ### デフォルトのDB設定（application.yml）
 
@@ -165,6 +190,20 @@ java -jar target/music-tracker-0.0.1-SNAPSHOT.jar
 | DB名       | music_tracker_db |
 | ユーザー   | tracker_user     |
 | パスワード | tracker_password |
+
+---
+
+## ☁️ 本番環境（Render）の環境変数
+
+| 変数名                                      | 必須 | 内容                                                         |
+| ------------------------------------------- | ---- | ------------------------------------------------------------ |
+| `DB_HOST` / `DB_PORT` / `DB_NAME`           | ○    | MySQL（Aiven）の接続先                                        |
+| `DB_USERNAME` / `DB_PASSWORD`               | ○    | MySQL の認証情報                                              |
+| `REMEMBER_ME_KEY`                           | ○    | ログイン保持 Cookie の署名鍵（長いランダム文字列）。未設定だと起動しません |
+| `AUDIO_STORAGE`                             |      | `s3` で R2 に保存。未設定なら `local`（再デプロイで音源が消える） |
+| `R2_ENDPOINT`                               | s3時 | `https://<アカウントID>.r2.cloudflarestorage.com`              |
+| `R2_BUCKET`                                 | s3時 | バケット名                                                    |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | s3時 | R2 の API トークン（オブジェクトの読み書き権限）                |
 
 ---
 
