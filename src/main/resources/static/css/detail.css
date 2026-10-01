@@ -1,0 +1,422 @@
+/* 作曲コア（スタジオ）画面 songs/detail.html のスタイル */
+/* ウィンドウサイズにぴったり追従させる（下部が間延びしない） */
+html, body { height: 100%; }
+body {
+    background-color: #f4f5f7;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- スクロール追従ヘッダー ---- */
+.core-header {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    flex: 0 0 auto;
+    background: #fff;
+    border-bottom: 1px solid #e3e6ea;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .04);
+}
+
+/* ---- スプリットビュー（リサイズ可能な3エリア） ---- */
+/* 残り高さ全部を使い切り、はみ出しは各パネル内でスクロールさせる */
+#split {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    padding: 1rem;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+/* grow/shrink を許可し、3カラムで画面幅を必ず使い切る（右側が空白にならない） */
+.panel {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: 100%;
+    overflow: auto;
+}
+
+/* ---- エリア上部ヘッダーの高さを左右で揃える ---- */
+.area-header {
+    min-height: 2.6rem;
+    flex: 0 0 auto;
+}
+.panel[data-panel="lyric"] { flex-basis: 39%; }
+.panel[data-panel="chord"] { flex-basis: 39%; }
+.panel[data-panel="info"]  { flex-basis: 22%; }
+
+.gutter {
+    flex: 0 0 10px;
+    cursor: col-resize;
+    align-self: stretch;
+    position: relative;
+}
+.gutter::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: #d3d8de;
+    border-radius: 2px;
+}
+.gutter:hover::before { background: #0d6efd; }
+
+@media (max-width: 991.98px) {
+    #split { flex-direction: column; }
+    .panel { flex-basis: auto !important; width: 100%; }
+    .gutter { display: none; }
+}
+
+/* ---- セクションカード ---- */
+.section-card {
+    background: #fff;
+    border: 1px solid #e3e6ea;
+    border-radius: .6rem;
+    padding: .6rem .7rem;
+    margin-bottom: .65rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+}
+.section-card.dragging { opacity: .5; outline: 2px dashed #0d6efd; }
+.section-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+.drag-handle {
+    cursor: grab;
+    color: #adb5bd;
+    user-select: none;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0 .15rem;
+}
+.drag-handle:active { cursor: grabbing; }
+.section-name {
+    flex: 1 1 auto;
+    border: 1px solid transparent;
+    background: transparent;
+    font-weight: 700;
+    color: #0d6efd;
+    border-radius: .4rem;
+    padding: .1rem .4rem;
+}
+.section-name:hover { background: #f1f5ff; }
+.section-name:focus {
+    outline: none;
+    border-color: #0d6efd;
+    background: #fff;
+}
+.btn-del {
+    border: none;
+    background: transparent;
+    color: #c0c5cc;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0 .3rem;
+}
+.btn-del:hover { color: #dc3545; }
+
+/* ---- セクション最小化（アコーディオン）トグル ---- */
+.min-btn {
+    border: none;
+    background: transparent;
+    color: #9aa3ad;
+    font-size: .85rem;
+    line-height: 1;
+    padding: .1rem .4rem;
+    cursor: pointer;
+    margin-left: auto;
+}
+.min-btn:hover { color: #0d6efd; }
+/* card-header にトグルを置く際の整列 */
+.card-header.collapsible-header { display: flex; align-items: center; }
+.card-header.collapsible-header > .min-btn { margin-left: auto; }
+
+.chord-area { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* ---- 進捗の数値入力 ---- */
+.pct-input {
+    width: 3.2rem;
+    text-align: right;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: .3rem;
+    padding: 0 .2rem;
+    font-variant-numeric: tabular-nums;
+}
+.pct-input:hover { background: #eef2f7; }
+.pct-input:focus { outline: none; border-color: #0d6efd; background: #fff; }
+/* 数値入力のスピナーを消す */
+.pct-input::-webkit-outer-spin-button,
+.pct-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pct-input { -moz-appearance: textfield; }
+
+/* ---- 保存トースト ---- */
+.save-toast {
+    position: fixed;
+    bottom: 1.2rem; right: 1.2rem;
+    z-index: 2000;
+    min-width: 220px;
+    display: none;
+}
+
+/* ---- ダイアトニックコード（リファレンス） ---- */
+.diatonic-panel { display: flex; flex-wrap: wrap; gap: .35rem; }
+.diatonic-chip {
+    border: 1px solid #d7e3f5;
+    background: #f3f8ff;
+    border-radius: .5rem;
+    padding: .2rem .5rem;
+    min-width: 3.4rem;
+    text-align: center;
+    line-height: 1.25;
+}
+.diatonic-chip .deg { display: block; font-size: .66rem; color: #6c8cc7; font-weight: 700; }
+.diatonic-chip .chord { display: block; font-weight: 700; color: #1b3a6b; }
+.diatonic-empty { color: #9aa3ad; font-size: .85rem; }
+
+/* ---- サークル・オブ・フィフス（五度圏） ---- */
+.cof {
+    position: relative;
+    width: 240px; height: 240px;
+    max-width: 100%;
+    margin: .3rem auto 0;
+}
+.cof-key {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 40px; height: 40px;
+    border: 1px solid #d7e3f5;
+    background: #fff;
+    border-radius: 50%;
+    font-size: .8rem; font-weight: 700;
+    color: #1b3a6b;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; line-height: 1;
+    cursor: pointer;
+    transition: background .12s, color .12s, box-shadow .12s, border-color .12s;
+}
+.cof-key.minor {
+    width: 33px; height: 33px;
+    font-size: .7rem;
+    background: #f3f8ff;
+    color: #5a76a8;
+}
+.cof-key:hover { border-color: #0d6efd; background: #eaf1ff; z-index: 2; }
+.cof-key.selected {
+    background: #0d6efd; color: #fff; border-color: #0d6efd;
+    box-shadow: 0 2px 10px rgba(13, 110, 253, .45);
+    z-index: 3;
+}
+.cof-center {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px; text-align: center;
+    font-size: .6rem; color: #c2cad4; font-weight: 700;
+    pointer-events: none; user-select: none;
+}
+
+/* ---- セクション個別 Key（転調） ---- */
+.section-key {
+    flex: 0 0 auto;
+    width: 5.6rem;
+    font-size: .8rem;
+    padding: .1rem .45rem;
+    border: 1px solid #d7e3f5;
+    background: #f7faff;
+    border-radius: .4rem;
+    color: #1b3a6b;
+    font-weight: 700;
+}
+.section-key::placeholder { color: #9bb6d8; font-weight: 400; }
+.section-key:focus { outline: none; border-color: #0d6efd; background: #fff; }
+
+/* ---- Zen Mode（全画面） ---- */
+html.zen, body.zen { overflow: hidden; height: 100%; }
+body.zen .core-header,
+body.zen .gutter { display: none !important; }
+body.zen #split { padding: 0; min-height: 0; }
+body.zen .panel:not(.zen-active) { display: none !important; }
+/* 画面いっぱい（100%フルサイズ）に広げる */
+.panel.zen-active {
+    position: fixed; inset: 0; z-index: 1500;
+    flex-basis: auto !important;
+    width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh;
+    margin: 0;
+    background: #fbfcfe;
+    padding: 4.2rem 1.6rem 1.4rem;
+    overflow: auto;
+    display: flex; flex-direction: column;
+}
+/* Zen 中はセクション本文を大きく使えるようにする */
+body.zen .panel.zen-active .section-list { flex: 1 1 auto; }
+body.zen .panel.zen-active .section-body { min-height: 9rem; }
+
+/* フローティング基本情報（Zen 中のみ表示） */
+#zen-float {
+    display: none;
+    position: fixed; top: .6rem; left: .9rem; right: 12rem; z-index: 1600;
+    background: rgba(255, 255, 255, .96);
+    border: 1px solid #e3e6ea; border-radius: .6rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+    padding: .4rem .8rem;
+    align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+body.zen #zen-float { display: flex; }
+#zen-float .zf-label { font-size: .68rem; color: #8a929b; font-weight: 700; margin-right: .25rem; }
+#zen-float .zf-val { font-weight: 700; color: #1b3a6b; }
+#zen-float .diatonic-panel { gap: .22rem; }
+#zen-float .diatonic-chip { padding: .04rem .35rem; min-width: auto; }
+#zen-float .diatonic-chip .deg { font-size: .58rem; }
+
+/* 全画面を閉じるボタン：一回り大きく・目立つ右上固定 */
+#zen-close {
+    position: fixed; top: .8rem; right: 1.1rem; z-index: 1700; display: none;
+    align-items: center; gap: .35rem;
+    font-size: 1.05rem; font-weight: 700;
+    padding: .55rem 1.3rem; border-radius: .6rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
+}
+body.zen #zen-close { display: inline-flex; }
+
+#analysis-reopen { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 1700; display: none; }
+
+/* コード全画面の 2分割（入力 ⇄ 理論解析） */
+.chord-zen-wrap { display: block; }
+body.zen .panel[data-panel="chord"].zen-active .chord-zen-wrap {
+    display: flex; gap: 0; align-items: stretch;
+    flex: 1 1 auto; min-height: 0;
+}
+.chord-edit { min-width: 0; }
+body.zen .panel[data-panel="chord"].zen-active .chord-edit {
+    flex: 1 1 55%; overflow: auto; padding-right: .4rem; min-width: 12rem;
+}
+.chord-analysis { display: none; }
+body.zen .panel[data-panel="chord"].zen-active .chord-analysis.open {
+    display: block; flex: 1 1 45%; min-width: 12rem;
+    border-left: 1px solid #e3e6ea; padding-left: 1.2rem;
+    overflow: auto;
+}
+/* コード全画面の 2画面リサイズ用ガター（入力 ⇄ 解析の境界線） */
+.chord-gutter {
+    display: none;
+    flex: 0 0 12px;
+    cursor: col-resize;
+    align-self: stretch;
+    position: relative;
+}
+.chord-gutter.show { display: block; }
+.chord-gutter::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: #d3d8de;
+    border-radius: 2px;
+}
+.chord-gutter:hover::before { background: #0d6efd; }
+.analysis-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: .6rem;
+}
+.analysis-section { margin-bottom: 1rem; }
+.analysis-section h4 { font-size: .8rem; color: #0d6efd; font-weight: 700; margin-bottom: .35rem; }
+.degree-cards { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+/* 改行同期：左の入力欄の各行に対応する1行ぶんの度数表示 */
+.degree-lines { display: flex; flex-direction: column; gap: .35rem; }
+.degree-line {
+    display: flex; flex-wrap: wrap; gap: .4rem;
+    align-items: center;
+    min-height: 2.1rem;
+}
+.degree-line.is-blank { min-height: 1.1rem; }
+.degree-card {
+    border: 1px solid #e3e6ea; border-radius: .5rem;
+    padding: .3rem .55rem; text-align: center; min-width: 3.2rem; background: #fff;
+}
+.degree-card .chord { font-weight: 700; color: #1b3a6b; }
+.degree-card .deg { font-size: .7rem; color: #6c8cc7; font-weight: 700; }
+.degree-card.nondiatonic { background: #fff6f0; border-color: #f3d3bf; }
+.degree-card.nondiatonic .deg { color: #c2772f; }
+
+/* 解析側ヘッダーのセクション個別 Key バッジ */
+.analysis-section h4 .sec-key-badge {
+    font-size: .66rem; font-weight: 700; color: #6c8cc7;
+    background: #eef4ff; border: 1px solid #d7e3f5;
+    border-radius: .35rem; padding: 0 .35rem; margin-left: .4rem;
+}
+
+/* ---- テンプレート選択ポップオーバー ---- */
+.template-menu {
+    position: fixed;
+    z-index: 2100;
+    min-width: 240px; max-width: 340px;
+    max-height: 60vh; overflow: auto;
+    background: #fff;
+    border: 1px solid #d7dde4;
+    border-radius: .6rem;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .16);
+    padding: .4rem;
+    display: none;
+}
+.template-menu.show { display: block; }
+.template-menu .tm-title { font-size: .72rem; color: #8a929b; font-weight: 700; padding: .2rem .4rem .35rem; }
+.template-menu .tm-row {
+    display: flex; align-items: center; gap: .2rem;
+    border-radius: .4rem; padding: .1rem .15rem;
+}
+.template-menu .tm-row:hover { background: #f6f9ff; }
+.template-menu .tm-item {
+    flex: 1 1 auto;
+    display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+    text-align: left;
+    border: none; background: transparent;
+    border-radius: .4rem; padding: .4rem .5rem;
+}
+.template-menu .tm-item:hover { background: #eaf1ff; }
+.template-menu .tm-item .tm-count { font-size: .7rem; color: #9aa3ad; white-space: nowrap; }
+.template-menu .tm-actions { display: flex; gap: .1rem; flex: 0 0 auto; }
+.template-menu .tm-act {
+    border: none; background: transparent; cursor: pointer;
+    font-size: .9rem; line-height: 1; padding: .25rem .3rem; border-radius: .35rem;
+    color: #8a929b;
+}
+.template-menu .tm-act:hover { background: #e7ecf3; }
+.template-menu .tm-act[data-act="delete"]:hover { background: #fde8e8; }
+.template-menu .tm-empty { color: #9aa3ad; font-size: .82rem; padding: .5rem; }
+
+/* =========================================================
+   スマホ対応：タブ切り替え
+   ========================================================= */
+@media (max-width: 767.98px) {
+    #split { flex-direction: column; padding: .5rem; padding-bottom: 80px; }
+    .gutter { display: none !important; }
+    /* タブ非アクティブパネルは非表示 */
+    .panel { display: none !important; }
+    .panel.tab-active { display: flex !important; flex-direction: column; }
+    /* ヘッダーの省スペース化 */
+    .core-header h1.h5 { font-size: .88rem; }
+    .title-text {
+        max-width: 9rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        display: inline-block; vertical-align: middle;
+    }
+    #save-status { display: none !important; }
+    /* デスクトップ保存ボタンは非表示（モバイル固定バーを使う） */
+    #save-all { display: none !important; }
+}
+
+/* ---- モバイル固定保存バー ---- */
+.mobile-save-bar { display: none; }
+@media (max-width: 767.98px) {
+    .mobile-save-bar {
+        display: flex;
+        position: fixed; bottom: 0; left: 0; right: 0;
+        z-index: 1100;
+        background: #fff;
+        border-top: 1px solid #e3e6ea;
+        padding: .75rem 1rem;
+        box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+}
