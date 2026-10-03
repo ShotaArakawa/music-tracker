@@ -123,18 +123,28 @@
         .tag-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; }
         .tag-scroll .d-flex { flex-wrap: nowrap; }
 
-        /* ---- FAB（新規登録） ---- */
-        .fab {
-            position: fixed;
-            bottom: 1.5rem; right: 1.5rem;
-            z-index: 1000;
-            width: 56px; height: 56px;
-            border-radius: 50%;
-            font-size: 1.5rem; line-height: 1;
-            padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 14px rgba(13,110,253,.4);
+        /* ---- セクションの折り畳み ---- */
+        .section-toggle {
+            display: flex; align-items: center; gap: .35rem;
+            border: 0; background: transparent; padding: 0;
+            font: inherit; color: inherit; text-align: left;
         }
+        .section-toggle:hover { color: #0d6efd; }
+        .section-toggle .chevron {
+            display: inline-block; width: 1.1rem; color: #8a929b;
+            transition: transform .15s ease;
+        }
+        .song-section.collapsed .chevron { transform: rotate(-90deg); }
+        .song-section.collapsed .section-title { margin-bottom: 0; }
+
+        /* ---- 新規追加の行 ---- */
+        .add-row td { background-color: #f3f8ff; border-bottom: 2px solid #cfe2ff; }
+        .add-row:hover td { background-color: #f3f8ff; }
+        .add-row .add-submit { min-width: 7rem; }
+
+        /* ステータスのポップアップ下部の「追加・削除」 */
+        .pick-menu .pick-divider { border-top: 1px solid #e3e6ea; margin: .25rem 0; }
+        .pick-menu .pick-manage { color: #0d6efd; font-size: .85rem; }
     </style>
 </head>
 <body class="bg-light">
@@ -150,7 +160,6 @@
                 🎵 最後に編集した曲に戻る
             </a>
             <a th:href="@{/calendar}" class="btn btn-outline-primary">📅 カレンダー</a>
-            <a th:href="@{/songs/new}" class="btn btn-primary d-none d-md-inline-flex">＋ 新規登録</a>
             <span class="vr mx-1 d-none d-md-inline"></span>
             <a th:href="@{/profile}" class="btn btn-outline-secondary align-self-center"
                title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
@@ -167,8 +176,11 @@
     <div class="mb-4">
         <div class="d-flex align-items-center gap-2 mb-1">
             <span class="fw-bold small">タグで絞り込み:</span>
-            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="tag-manage-toggle"
-                    aria-expanded="false" aria-controls="tag-manager">🏷 タグを編集</button>
+            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none manage-toggle"
+                    id="tag-manage-toggle" aria-expanded="false" aria-controls="tag-manager">🏷 タグを編集</button>
+            <span class="text-muted small">|</span>
+            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none manage-toggle"
+                    id="status-manage-toggle" aria-expanded="false" aria-controls="status-manager">🔖 ステータスを編集</button>
         </div>
         <div class="tag-scroll">
             <div class="d-flex gap-1">
@@ -201,22 +213,57 @@
                 <button type="submit" class="btn btn-sm btn-primary text-nowrap">＋ 追加</button>
             </form>
         </div>
+
+        <!-- ステータスの追加・削除（自分が追加したものだけ。削除するとその曲は既定のステータスに戻る） -->
+        <div class="tag-manager" id="status-manager" hidden>
+            <div class="small text-muted mb-2">
+                既定のステータスに加えて、自分用のステータスを追加できます（「完了」は完了チェックと連動します）。
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span th:each="s : ${statuses}" th:if="${s.custom()}" class="tag-chip">
+                    <span class="badge" th:classappend="${s.colorClass}" th:text="${s.label}">ステータス</span>
+                    <button type="button" class="status-delete" th:attr="data-id=${s.id},data-name=${s.label}"
+                            th:title="'「' + ${s.label} + '」を削除'">×</button>
+                </span>
+                <span th:if="${statuses.?[custom()].isEmpty()}" class="text-muted small">追加したステータスはまだありません。</span>
+            </div>
+            <form class="d-flex gap-2 flex-wrap" id="status-add-form" autocomplete="off">
+                <input type="text" class="form-control form-control-sm" id="status-add-name" maxlength="30"
+                       placeholder="新しいステータス名（例: ミックス中）" style="max-width: 18rem;" required>
+                <select class="form-select form-select-sm" id="status-add-color" style="max-width: 9rem;"
+                        aria-label="バッジの色">
+                    <option th:each="c : ${statusColors}" th:value="${c.name()}" th:text="${c.label}"
+                            th:attr="data-class=${c.colorClass}">色</option>
+                </select>
+                <span class="badge align-self-center" id="status-add-preview">プレビュー</span>
+                <button type="submit" class="btn btn-sm btn-primary text-nowrap">＋ 追加</button>
+            </form>
+        </div>
     </div>
 
     <!-- 楽曲一覧（作業中の曲）と、完了した曲のバックアップ一覧 -->
     <section th:each="sec : ${sections}" class="song-section mb-5" th:attr="data-archive=${sec.archive}">
+        <!-- 見出しをクリックすると折り畳み／展開（状態はブラウザに記憶） -->
         <h2 class="section-title">
-            <span th:text="${sec.archive} ? '🗂 ' + ${sec.title} : '🎵 ' + ${sec.title}">楽曲一覧</span>
-            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-1"
-                  th:text="${sec.songs.size()} + '曲'">0曲</span>
+            <button type="button" class="section-toggle" aria-expanded="true"
+                    th:attr="aria-controls=${sec.archive} ? 'section-archive' : 'section-active'"
+                    th:title="${sec.archive} ? 'バックアップ一覧を折り畳む／開く' : '楽曲一覧を折り畳む／開く'">
+                <span class="chevron" aria-hidden="true">▾</span>
+                <span th:text="${sec.archive} ? '🗂 ' + ${sec.title} : '🎵 ' + ${sec.title}">楽曲一覧</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-1"
+                      th:text="${sec.songs.size()} + '曲'">0曲</span>
+            </button>
         </h2>
 
-        <div th:if="${sec.songs.isEmpty()}" class="alert alert-light border text-muted" th:text="${sec.emptyMessage}">
+        <div class="section-content" th:id="${sec.archive} ? 'section-archive' : 'section-active'">
+
+        <div th:if="${sec.songs.isEmpty() and sec.archive}" class="alert alert-light border text-muted"
+             th:text="${sec.emptyMessage}">
             まだ曲がありません。
         </div>
 
-        <!-- デスクトップ: テーブル表示 -->
-        <div class="table-responsive d-none d-md-block" th:unless="${sec.songs.isEmpty()}">
+        <!-- デスクトップ: テーブル表示（楽曲一覧は1行目が新規追加用の行） -->
+        <div class="table-responsive d-none d-md-block" th:unless="${sec.songs.isEmpty() and sec.archive}">
             <table class="table table-hover align-middle bg-white shadow-sm rounded"
                    th:classappend="${sec.archive} ? 'archive-table' : ''">
                 <thead class="table-light">
@@ -230,7 +277,38 @@
                     <th scope="col" class="text-end">操作</th>
                 </tr>
                 </thead>
-                <tbody>
+                <!-- 新規追加の行（曲名を入れて Enter か「＋ 追加」。ほかの項目は任意） -->
+                <tbody th:unless="${sec.archive}" class="add-body">
+                <tr class="add-row">
+                    <td class="drag-cell text-primary fw-bold">＋</td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm add-title" maxlength="200"
+                               placeholder="新しい曲名を入力…" aria-label="新しい曲の曲名">
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm add-status" aria-label="ステータス">
+                            <option th:each="s : ${statuses}" th:unless="${s.key == 'RELEASED'}"
+                                    th:value="${s.key}" th:text="${s.label}">ステータス</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm add-tag" aria-label="タグ">
+                            <option value="">（なし）</option>
+                            <option th:each="t : ${tags}" th:value="${t.id}"
+                                    th:selected="${selectedTagId != null and selectedTagId == t.id}"
+                                    th:text="${t.name}">タグ</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="date" class="form-control form-control-sm add-deadline" aria-label="納期">
+                    </td>
+                    <td class="done-cell"></td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-success fw-bold px-3 add-submit">＋ 追加</button>
+                    </td>
+                </tr>
+                </tbody>
+                <tbody class="song-body">
                 <tr th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}"
                     th:attr="data-song-id=${song.id}"
                     th:classappend="${dl != null and dl.overdue} ? 'table-danger' : ''">
@@ -248,10 +326,10 @@
 
                     <!-- ステータス（クリックで選択ポップアップ） -->
                     <td class="editable has-hint" data-field="status" data-hint="クリックしてステータスを選択"
-                        th:attr="data-value=${song.status.name()}">
+                        th:attr="data-value=${song.statusKey}">
                         <span class="cell-value badge"
-                              th:classappend="${song.status.colorClass}"
-                              th:text="${song.status.label}">ステータス</span>
+                              th:classappend="${song.statusColorClass}"
+                              th:text="${song.statusLabel}">ステータス</span>
                     </td>
 
                     <!-- タグ（クリックで選択ポップアップ：単一選択） -->
@@ -302,6 +380,16 @@
             </table>
         </div>
 
+        <div th:if="${sec.songs.isEmpty() and !sec.archive}" class="text-muted small px-1 mb-3 d-none d-md-block"
+             th:text="${sec.emptyMessage}">まだ曲がありません。</div>
+
+        <!-- モバイル: 新規追加（曲名だけ入れて追加。ほかの項目は一覧で編集） -->
+        <form th:unless="${sec.archive}" class="d-md-none song-card d-flex gap-2 mobile-add" autocomplete="off">
+            <input type="text" class="form-control add-title" maxlength="200" placeholder="新しい曲名を入力…"
+                   aria-label="新しい曲の曲名">
+            <button type="submit" class="btn btn-success fw-bold text-nowrap">＋ 追加</button>
+        </form>
+
         <!-- モバイル: カード型一覧 -->
         <div class="d-md-none" th:unless="${sec.songs.isEmpty()}">
             <div th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}" class="song-card"
@@ -310,8 +398,8 @@
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                     <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
                     <span class="badge flex-shrink-0"
-                          th:classappend="${song.status.colorClass}"
-                          th:text="${song.status.label}">ステータス</span>
+                          th:classappend="${song.statusColorClass}"
+                          th:text="${song.statusLabel}">ステータス</span>
                 </div>
                 <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
                     <span th:each="tag : ${song.tags}"
@@ -330,18 +418,21 @@
                 <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
             </div>
         </div>
-    </section>
 
-    <!-- スマホ用 FAB（新規登録） -->
-    <a th:href="@{/songs/new}" class="btn btn-primary fab d-md-none" title="新規登録">＋</a>
+        <div th:if="${sec.songs.isEmpty() and !sec.archive}" class="text-muted small px-1 d-md-none"
+             th:text="${sec.emptyMessage}">まだ曲がありません。</div>
+        </div>
+    </section>
 
 </div>
 
 <!-- ポップアップの選択肢（JS が読み取って使う） -->
 <template id="tpl-status">
-    <button type="button" th:each="s : ${statuses}" th:attr="data-value=${s.name()}">
+    <button type="button" th:each="s : ${statuses}" th:attr="data-value=${s.key}">
         <span class="badge" th:classappend="${s.colorClass}" th:text="${s.label}">ステータス</span>
     </button>
+    <div class="pick-divider"></div>
+    <button type="button" class="pick-manage" data-manage="status">＋ ステータスを追加・削除…</button>
 </template>
 <template id="tpl-tag">
     <button type="button" data-value=""><span class="cell-empty">（なし）</span></button>

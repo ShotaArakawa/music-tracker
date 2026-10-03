@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * 歌詞を Word（.docx）・テキスト（.txt）・PDF に書き出す。
  * <p>
- * どの形式も「曲名」→ 各セクション「【セクション名】＋本文」の順に並べる。
+ * どの形式も「曲名」→「Key：C　BPM：120」（横並び）→ 各セクション「【セクション名】＋本文」の順に並べる。
  * 見出しも本文もないセクションは書き出さない。
  */
 @Service
@@ -63,9 +63,9 @@ public class LyricsExportService {
     // ===================== テキスト =====================
 
     /** UTF-8・改行 CRLF のテキストにする（Windows のメモ帳でもそのまま読める）。 */
-    public byte[] toText(String title, List<SectionDto> sections) {
+    public byte[] toText(String title, String keyBpm, List<SectionDto> sections) {
         StringBuilder sb = new StringBuilder();
-        sb.append(title).append("\r\n\r\n");
+        sb.append(title).append("\r\n").append(keyBpm).append("\r\n\r\n");
         for (Section s : normalize(sections)) {
             if (!s.heading().isEmpty()) {
                 sb.append(s.heading()).append("\r\n");
@@ -80,13 +80,18 @@ public class LyricsExportService {
 
     // ===================== Word =====================
 
-    public byte[] toWord(String title, List<SectionDto> sections) {
+    public byte[] toWord(String title, String keyBpm, List<SectionDto> sections) {
         try (XWPFDocument doc = new XWPFDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             XWPFParagraph titlePara = doc.createParagraph();
             titlePara.setAlignment(ParagraphAlignment.CENTER);
-            titlePara.setSpacingAfter(360);
+            titlePara.setSpacingAfter(60);
             XWPFRun titleRun = run(titlePara, title, 18);
             titleRun.setBold(true);
+            // タイトルの下に Key と BPM を横並びで
+            XWPFParagraph metaPara = doc.createParagraph();
+            metaPara.setAlignment(ParagraphAlignment.CENTER);
+            metaPara.setSpacingAfter(360);
+            run(metaPara, keyBpm, 11).setColor("5C6670");
 
             for (Section s : normalize(sections)) {
                 if (!s.heading().isEmpty()) {
@@ -139,11 +144,13 @@ public class LyricsExportService {
     private static final float HEADING_SIZE = 12.5f;
     private static final float BODY_SIZE = 11f;
     private static final float BODY_LEADING = 19f;
+    private static final float META_SIZE = 10.5f;
+    private static final Color META_COLOR = new Color(0x5C, 0x66, 0x70);
 
     /** A4 縦の PDF にする。長い行は折り返し、ページに収まらなければ改ページする。 */
-    public byte[] toPdf(String title, List<SectionDto> sections) {
+    public byte[] toPdf(String title, String keyBpm, List<SectionDto> sections) {
         try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            new PdfWriter(doc, new PdfFonts(doc)).write(title, normalize(sections));
+            new PdfWriter(doc, new PdfFonts(doc)).write(title, keyBpm, normalize(sections));
             doc.getDocumentInformation().setTitle(title);
             doc.getDocumentInformation().setCreator("Music-Tracker");
             doc.getDocumentInformation().setCreationDate(Calendar.getInstance());
@@ -167,13 +174,17 @@ public class LyricsExportService {
             this.fonts = fonts;
         }
 
-        void write(String title, List<Section> sections) throws IOException {
+        void write(String title, String keyBpm, List<Section> sections) throws IOException {
             newPage();
             for (String line : wrap(title, TITLE_SIZE)) {
                 float w = fonts.width(line, TITLE_SIZE);
                 text(line, MARGIN + (width - w) / 2, TITLE_SIZE, Color.BLACK, true);
                 y -= TITLE_SIZE * 1.5f;
             }
+            // タイトルの下に Key と BPM を横並びで
+            float metaW = fonts.width(keyBpm, META_SIZE);
+            text(keyBpm, MARGIN + (width - metaW) / 2, META_SIZE, META_COLOR, false);
+            y -= META_SIZE * 1.6f;
             y -= 14;
             for (Section s : sections) {
                 if (!s.heading().isEmpty()) {

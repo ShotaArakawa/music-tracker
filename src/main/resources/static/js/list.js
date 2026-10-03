@@ -136,7 +136,15 @@ function openPickMenu(td) {
     pickMenu.innerHTML = '';
     pickMenu.appendChild(tpl.content.cloneNode(true));
     const current = td.dataset.value || '';
-    pickMenu.querySelectorAll('button').forEach((btn) => {
+    // 「ステータスを追加・削除…」はステータス管理の欄を開く
+    pickMenu.querySelectorAll('.pick-manage').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closePickMenu();
+            openManager('status');
+        });
+    });
+    pickMenu.querySelectorAll('button[data-value]').forEach((btn) => {
         btn.classList.toggle('current', btn.dataset.value === String(current));
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -156,7 +164,7 @@ function openPickMenu(td) {
         window.scrollX + document.documentElement.clientWidth - pickMenu.offsetWidth - 8);
     pickMenu.style.left = Math.max(8, left) + 'px';
     pickMenu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-    const first = pickMenu.querySelector('button.current') || pickMenu.querySelector('button');
+    const first = pickMenu.querySelector('button.current') || pickMenu.querySelector('button[data-value]');
     if (first) first.focus();
 }
 
@@ -264,15 +272,79 @@ document.querySelectorAll('.done-check').forEach((box) => {
 });
 
 /* =========================================================
-   2) タグの追加・削除
+   2) タグ・ステータスの追加・削除
    ========================================================= */
-const tagManager = document.getElementById('tag-manager');
-const tagToggle = document.getElementById('tag-manage-toggle');
-tagToggle.addEventListener('click', () => {
-    tagManager.hidden = !tagManager.hidden;
-    tagToggle.setAttribute('aria-expanded', String(!tagManager.hidden));
-    if (!tagManager.hidden) document.getElementById('tag-add-name').focus();
+const managers = {
+    tag: { panel: document.getElementById('tag-manager'), toggle: document.getElementById('tag-manage-toggle'),
+        input: 'tag-add-name' },
+    status: { panel: document.getElementById('status-manager'),
+        toggle: document.getElementById('status-manage-toggle'), input: 'status-add-name' }
+};
+
+// 管理欄を開く（もう一方は閉じる）。open を省略すると開閉を切り替える
+function openManager(name, open) {
+    Object.keys(managers).forEach((key) => {
+        const m = managers[key];
+        const show = key === name ? (open === undefined ? m.panel.hidden : open) : false;
+        m.panel.hidden = !show;
+        m.toggle.setAttribute('aria-expanded', String(show));
+        if (show && key === name) {
+            m.panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            document.getElementById(m.input).focus();
+        }
+    });
+}
+Object.keys(managers).forEach((key) => {
+    managers[key].toggle.addEventListener('click', () => openManager(key));
 });
+
+// ステータスの追加
+const statusColor = document.getElementById('status-add-color');
+const statusPreview = document.getElementById('status-add-preview');
+function updateStatusPreview() {
+    const name = document.getElementById('status-add-name').value.trim();
+    statusPreview.className = 'badge align-self-center '
+        + statusColor.options[statusColor.selectedIndex].dataset.class;
+    statusPreview.textContent = name || 'プレビュー';
+}
+statusColor.addEventListener('change', updateStatusPreview);
+document.getElementById('status-add-name').addEventListener('input', updateStatusPreview);
+updateStatusPreview();
+
+document.getElementById('status-add-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('status-add-name').value.trim();
+    if (!name) return;
+    postJson('/statuses', { name: name, color: statusColor.value })
+        .then(() => {
+            sessionStorage.setItem('mt-list-toast', 'ステータス「' + name + '」を追加しました');
+            sessionStorage.setItem('mt-open-manager', 'status');
+            location.reload();
+        })
+        .catch((err) => showToast(err.message, false));
+});
+
+document.querySelectorAll('.status-delete').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        if (!confirm('ステータス「' + btn.dataset.name + '」を削除します。\n'
+            + 'このステータスの曲は、選ぶ前のステータスに戻ります。よろしいですか？')) return;
+        postJson('/statuses/' + btn.dataset.id, undefined, 'DELETE')
+            .then(() => {
+                sessionStorage.setItem('mt-open-manager', 'status');
+                location.reload();
+            })
+            .catch((err) => showToast(err.message, false));
+    });
+});
+
+// 追加・削除して再読み込みした後は、管理欄を開いたままにする
+(function reopenManager() {
+    const name = sessionStorage.getItem('mt-open-manager');
+    if (name && managers[name]) {
+        sessionStorage.removeItem('mt-open-manager');
+        openManager(name, true);
+    }
+})();
 
 document.getElementById('tag-add-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -280,7 +352,10 @@ document.getElementById('tag-add-form').addEventListener('submit', (e) => {
     const name = input.value.trim();
     if (!name) return;
     postJson('/tags', { name: name })
-        .then(() => location.reload())
+        .then(() => {
+            sessionStorage.setItem('mt-open-manager', 'tag');
+            location.reload();
+        })
         .catch((err) => showToast(err.message, false));
 });
 
@@ -305,7 +380,7 @@ document.querySelectorAll('.tag-delete').forEach((btn) => {
 let dragRow = null;
 
 function getRowAfter(tbody, y) {
-    const rows = [...tbody.querySelectorAll('tr:not(.dragging)')];
+    const rows = [...tbody.querySelectorAll('tr[data-song-id]:not(.dragging)')];
     return rows.reduce((closest, row) => {
         const box = row.getBoundingClientRect();
         const offset = y - box.top - box.height / 2;
@@ -317,7 +392,7 @@ function getRowAfter(tbody, y) {
 }
 
 function saveOrder() {
-    const ids = [...document.querySelectorAll('tbody tr')]
+    const ids = [...document.querySelectorAll('.song-body tr[data-song-id]')]
         .map((tr) => parseInt(tr.dataset.songId, 10));
     if (!ids.length) return;
     postJson('/songs/reorder', ids)
@@ -326,7 +401,7 @@ function saveOrder() {
 }
 
 // 楽曲一覧・バックアップ一覧それぞれの表の中で並び替える（表をまたいだ移動はしない）
-document.querySelectorAll('tbody').forEach((tbody) => {
+document.querySelectorAll('.song-body').forEach((tbody) => {
     tbody.querySelectorAll('tr').forEach((tr) => {
         const handle = tr.querySelector('.row-handle');
         if (!handle) return;
@@ -356,4 +431,82 @@ document.querySelectorAll('tbody').forEach((tbody) => {
         }
     });
     tbody.addEventListener('drop', (e) => e.preventDefault());
+});
+
+/* =========================================================
+   4) 新規追加の行（楽曲一覧の1行目。スマホは一覧の上の入力欄）
+   ========================================================= */
+function addSong(form) {
+    const title = form.querySelector('.add-title');
+    const name = title.value.trim();
+    if (!name) {
+        title.focus();
+        showToast('曲名を入力してください', false);
+        return;
+    }
+    const pick = (selector) => {
+        const el = form.querySelector(selector);
+        return el ? el.value : '';
+    };
+    const buttons = form.querySelectorAll('button');
+    buttons.forEach((b) => { b.disabled = true; });
+    postJson('/songs', {
+        title: name,
+        status: pick('.add-status'),
+        tagId: pick('.add-tag'),
+        deadline: pick('.add-deadline')
+    }).then(() => {
+        sessionStorage.setItem('mt-list-toast', '「' + name + '」を追加しました');
+        sessionStorage.setItem('mt-focus-add', '1');
+        location.reload();
+    }).catch((err) => {
+        buttons.forEach((b) => { b.disabled = false; });
+        showToast(err.message, false);
+    });
+}
+
+document.querySelectorAll('.add-row').forEach((row) => {
+    row.querySelector('.add-submit').addEventListener('click', () => addSong(row));
+    row.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                addSong(row);
+            }
+        });
+    });
+});
+document.querySelectorAll('.mobile-add').forEach((form) => {
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        addSong(form);
+    });
+});
+
+// 続けて追加できるよう、追加後は曲名の欄にカーソルを置く
+if (sessionStorage.getItem('mt-focus-add')) {
+    sessionStorage.removeItem('mt-focus-add');
+    const input = [...document.querySelectorAll('.add-title')].find((el) => el.offsetParent !== null);
+    if (input) input.focus();
+}
+
+/* =========================================================
+   5) 楽曲一覧・バックアップ一覧の折り畳み（開閉の状態はこのブラウザに記憶）
+   ========================================================= */
+function setCollapsed(section, collapsed) {
+    section.classList.toggle('collapsed', collapsed);
+    section.querySelector('.section-content').hidden = collapsed;
+    section.querySelector('.section-toggle').setAttribute('aria-expanded', String(!collapsed));
+}
+
+document.querySelectorAll('.song-section').forEach((section) => {
+    const key = 'mt-collapsed-' + (section.dataset.archive === 'true' ? 'archive' : 'active');
+    let saved = null;
+    try { saved = localStorage.getItem(key); } catch (e) { /* 保存できない環境では毎回開いた状態 */ }
+    setCollapsed(section, saved === '1');
+    section.querySelector('.section-toggle').addEventListener('click', () => {
+        const collapsed = !section.classList.contains('collapsed');
+        setCollapsed(section, collapsed);
+        try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) { /* 無視 */ }
+    });
 });

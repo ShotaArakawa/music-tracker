@@ -1,5 +1,6 @@
 package com.portfolio.musictracker.controller;
 
+import com.portfolio.musictracker.chordchart.ChordChartService;
 import com.portfolio.musictracker.dto.LyricsExportRequest;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.security.CustomUserDetails;
@@ -48,11 +49,17 @@ public class LyricsController {
                                          @AuthenticationPrincipal CustomUserDetails principal) {
         Song song = songService.findOwned(id, principal.getUser());
         String title = song.getTitle();
+        // タイトルの下に「Key：C　BPM：120」を横並びで入れる
+        String keyBpm = ChordChartService.keyBpmText(
+                request.getMusicKey() != null ? request.getMusicKey() : song.getMusicKey(),
+                request.getBpm() != null ? request.getBpm() : song.getBpm());
         String baseName = "歌詞_" + safeFileName(title);
         return switch (format) {
-            case "docx" -> file(exportService.toWord(title, request.getSections()), DOCX, baseName + ".docx");
-            case "txt" -> file(exportService.toText(title, request.getSections()), TEXT, baseName + ".txt");
-            case "pdf" -> file(exportService.toPdf(title, request.getSections()),
+            case "docx" -> file(exportService.toWord(title, keyBpm, request.getSections()), DOCX,
+                    baseName + ".docx");
+            case "txt" -> file(exportService.toText(title, keyBpm, request.getSections()), TEXT,
+                    baseName + ".txt");
+            case "pdf" -> file(exportService.toPdf(title, keyBpm, request.getSections()),
                     MediaType.APPLICATION_PDF, baseName + ".pdf");
             default -> throw new IllegalArgumentException("出力形式は docx / txt / pdf のいずれかを指定してください");
         };

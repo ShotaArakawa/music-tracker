@@ -240,9 +240,9 @@ class SongControllerTest extends IntegrationTestSupport {
 
         inTx(() -> {
             Song saved = songRepository.findById(song.getId()).orElseThrow();
-            // BPM・Key・世界観は画面から外したため、送られてきても変更しない
-            assertThat(saved.getBpm()).isEqualTo(90);
-            assertThat(saved.getMusicKey()).isEqualTo("C");
+            // Key・BPM は保存する（Key は前後の空白を除く）。世界観は画面から外したため変更しない
+            assertThat(saved.getBpm()).isEqualTo(120);
+            assertThat(saved.getMusicKey()).isEqualTo("Am");
             assertThat(saved.getWorldViewMemo()).isEqualTo("夜の街");
             assertThat(saved.getLyricProgress()).isEqualTo(100);
             assertThat(saved.getLyricSections()).extracting(s -> s.getName()).containsExactly("サビ", "Cメロ");
@@ -260,5 +260,92 @@ class SongControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/songs/" + song.getId() + "/chord-chart").with(as(alice)))
                 .andExpect(jsonPath("$.sheet").doesNotExist());
+        // Key・BPM を送らなければ変更しない
+        assertThat(songRepository.findById(song.getId()).orElseThrow().getMusicKey()).isEqualTo("Am");
+    }
+
+    @Test
+    void 新しい曲のKeyとBPMは既定でCと120で範囲外のBPMは拒否する() throws Exception {
+        Song song = createSong(alice, "曲");
+        assertThat(song.getMusicKey()).isEqualTo("C");
+        assertThat(song.getBpm()).isEqualTo(120);
+
+        mockMvc.perform(post("/songs/" + song.getId() + "/save").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"bpm\":0,\"lyricSections\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("BPM")));
+        mockMvc.perform(post("/songs/" + song.getId() + "/save").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"bpm\":1000,\"lyricSections\":[]}"))
+                .andExpect(status().isBadRequest());
+        // 空の Key は既定の C にする
+        mockMvc.perform(post("/songs/" + song.getId() + "/save").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"musicKey\":\"  \",\"bpm\":174,\"lyricSections\":[]}"))
+                .andExpect(status().isOk());
+        Song saved = songRepository.findById(song.getId()).orElseThrow();
+        assertThat(saved.getMusicKey()).isEqualTo("C");
+        assertThat(saved.getBpm()).isEqualTo(174);
+    }
+
+    @Test
+    void スタジオにKeyとBPMを表示する() throws Exception {
+        Song song = createSong(alice, "曲");
+        song.setMusicKey("Ebm");
+        song.setBpm(88);
+        songRepository.save(song);
+        String html = mockMvc.perform(get("/songs/" + song.getId()).with(as(alice)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("id=\"key-value\">Ebm<").contains("value=\"88\"").contains("circle-of-fifths");
+    }
+
+    // ===== 新規追加の行 =====
+
+    @Test
+    void 一覧の新規追加行から曲を登録すると先頭に追加される() throws Exception {
+        Song existing = createSong(alice, "既存の曲");
+        Long tagId = tagRepository.save(new com.portfolio.musictracker.entity.Tag("ボカロ", alice)).getId();
+        String deadline = java.time.LocalDate.now().plusDays(10).toString();
+
+        String json = mockMvc.perform(post("/songs").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"  新曲  \",\"status\":\"ARRANGING\",\"tagId\":\"" + tagId
+                                + "\",\"deadline\":\"" + deadline + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("新曲"))
+                .andExpect(jsonPath("$.statusLabel").value("編曲中"))
+                .andExpect(jsonPath("$.tags[0].name").value("ボカロ"))
+                .andExpect(jsonPath("$.deadlineDate").value(deadline))
+                .andReturn().getResponse().getContentAsString();
+        Long id = Long.valueOf(json.replaceAll(".*\"id\":(\\d+).*", "$1"));
+
+        Song created = songRepository.findById(id).orElseThrow();
+        assertThat(created.getUser().getId()).isEqualTo(alice.getId());
+        assertThat(created.getListOrder()).isLessThan(existing.getListOrder());
+        assertThat(songRepository.findByUserOrderByListOrderAsc(alice)).extracting(Song::getTitle)
+                .containsExactly("新曲", "既存の曲");
+    }
+
+    @Test
+    void 新規追加は曲名が必須で他人のタグは付けられない() throws Exception {
+        Long bobTag = tagRepository.save(new com.portfolio.musictracker.entity.Tag("bobのタグ", bob)).getId();
+        mockMvc.perform(post("/songs").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("曲名は必須です"));
+        mockMvc.perform(post("/songs").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"曲\",\"tagId\":\"" + bobTag + "\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(songRepository.findByUser(alice)).isEmpty();
+    }
+
+    @Test
+    void 新規登録画面は廃止した() throws Exception {
+        mockMvc.perform(get("/songs/new").with(as(alice)))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(400, 404, 500));
+        String html = mockMvc.perform(get("/songs").with(as(alice)))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).doesNotContain("/songs/new").contains("add-row");
     }
 }

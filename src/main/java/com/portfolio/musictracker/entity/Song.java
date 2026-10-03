@@ -34,6 +34,11 @@ import java.util.Set;
 @Table(name = "songs")
 public class Song {
 
+    /** キーの既定値（C メジャー）。 */
+    public static final String DEFAULT_KEY = "C";
+    /** BPM の既定値。 */
+    public static final int DEFAULT_BPM = 120;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -70,6 +75,15 @@ public class Song {
     @Column(nullable = false, length = 30)
     private Status status = Status.LYRICS_WRITING;
 
+    /**
+     * ユーザーが追加したステータス。選んでいる間は {@link #status} より優先して表示する
+     * （{@link #status} には選ぶ前の既定のステータスが残り、追加したステータスを削除するとそこに戻る）。
+     * 「完了」にしている間は「完了」を表示し、完了を外すとこのステータスに戻る。
+     */
+    @ManyToOne
+    @JoinColumn(name = "custom_status_id")
+    private CustomStatus customStatus;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "song_tags",
@@ -88,12 +102,12 @@ public class Song {
 
     // ---- 作曲コア画面用の項目 ----
 
-    /** テンポ（BPM）。 */
-    private Integer bpm;
+    /** テンポ（BPM）。スタジオ画面で入力する。 */
+    private Integer bpm = DEFAULT_BPM;
 
-    /** キー（例: C, Am, F#m など）。 */
+    /** キー（例: C, Am, F#m など）。スタジオ画面の五度圏から選ぶ。 */
     @Column(length = 20)
-    private String musicKey;
+    private String musicKey = DEFAULT_KEY;
 
     /** 世界観・コンセプトのメモ。 */
     @Column(columnDefinition = "TEXT")
@@ -188,10 +202,26 @@ public class Song {
     }
 
     /**
-     * ステータスを変更し、「完了」チェックを連動させる。
-     * 「完了」にするときは直前のステータスを覚えておく。
+     * 既定のステータスを選ぶ。「完了」チェックを連動させ、追加したステータスの選択は外す
+     * （「完了」を選んだときだけは、完了を外したときに戻せるよう残しておく）。
      */
     public void changeStatus(Status newStatus) {
+        if (newStatus != Status.RELEASED) {
+            customStatus = null;
+        }
+        applyStatus(newStatus);
+    }
+
+    /** ユーザーが追加したステータスを選ぶ。完了していれば完了を外す。 */
+    public void changeStatus(CustomStatus newStatus) {
+        if (isCompleted()) {
+            applyStatus(statusBeforeCompletion());
+        }
+        customStatus = newStatus;
+    }
+
+    /** 既定のステータスを設定し、「完了」チェックを連動させる。「完了」にするときは直前のステータスを覚えておく。 */
+    private void applyStatus(Status newStatus) {
         if (newStatus == null || newStatus == status) {
             deadlineDone = isCompleted();
             return;
@@ -207,15 +237,43 @@ public class Song {
 
     /**
      * 「完了」チェックの切り替え。チェックで「完了」に、外すと完了前のステータスに戻す
-     * （覚えていなければ「フルコーラス完成」）。
+     * （追加したステータスだった場合はそれに戻る）。
      */
     public void markCompleted(boolean completed) {
         if (completed) {
-            changeStatus(Status.RELEASED);
+            applyStatus(Status.RELEASED);
         } else if (isCompleted()) {
-            changeStatus(previousStatus != null && previousStatus != Status.RELEASED
-                    ? previousStatus : Status.FULL_CHORUS_DONE);
+            applyStatus(statusBeforeCompletion());
         }
+    }
+
+    /** 完了前の既定のステータス（覚えていなければ「フルコーラス完成」）。 */
+    private Status statusBeforeCompletion() {
+        return previousStatus != null && previousStatus != Status.RELEASED
+                ? previousStatus : Status.FULL_CHORUS_DONE;
+    }
+
+    /** 画面で使うステータスのキー（既定は {@code ARRANGING} など、追加したものは {@code custom:12}）。 */
+    public String getStatusKey() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getKey() : status.name();
+    }
+
+    /** 表示するステータス名。 */
+    public String getStatusLabel() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getName() : status.getLabel();
+    }
+
+    /** 表示するステータスのバッジの色クラス。 */
+    public String getStatusColorClass() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getColorClass() : status.getColorClass();
+    }
+
+    public CustomStatus getCustomStatus() {
+        return customStatus;
+    }
+
+    public void setCustomStatus(CustomStatus customStatus) {
+        this.customStatus = customStatus;
     }
 
     public Status getStatus() {

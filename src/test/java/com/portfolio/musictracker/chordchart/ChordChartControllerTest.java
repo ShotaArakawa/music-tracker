@@ -98,6 +98,32 @@ class ChordChartControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    void エクスポートではタイトル下のKeyとBPMを画面の値にする() throws Exception {
+        Song song = songWithKey();
+        // テンプレートの Key / BPM 欄（古い値のまま）
+        String sheet = "{\"data\":[[\"\",\"夜明けのプロローグ\",\"\"],[\"\",\"\",\"Key：C　BPM：000\"],[\"【サビ】\",\"F\",\"G\"]],"
+                + "\"style\":{},\"mergeCells\":{},\"colWidths\":[90,60,60],\"rowHeights\":[30,30,30]}";
+        byte[] xlsx = mockMvc.perform(post("/songs/" + song.getId() + "/chord-chart/export").param("format", "xlsx")
+                        .param("key", "Eb").param("bpm", "150")
+                        .with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(sheet))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(ChordSheetExcelConverter.read(new ByteArrayInputStream(xlsx)).value(1, 2))
+                .isEqualTo("Key：Eb　BPM：150");
+
+        // Key / BPM 欄のない表は、曲名の下の空いたマスに曲の Key・BPM を入れる（PDF）
+        String noMeta = "{\"data\":[[\"夜明けのプロローグ\",\"\"],[\"\",\"\"],[\"F\",\"G\"]],"
+                + "\"style\":{},\"mergeCells\":{},\"colWidths\":[120,60],\"rowHeights\":[30,30,30]}";
+        byte[] pdf = mockMvc.perform(post("/songs/" + song.getId() + "/chord-chart/export").param("format", "pdf")
+                        .with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(noMeta))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(ChordSheetPdfImporter.read(pdf).value(1, 0)).isEqualTo("Key：Am　BPM：128");
+    }
+
+    @Test
     void 他人の曲のコード譜は扱えない() throws Exception {
         Song song = songWithKey();
         mockMvc.perform(get("/songs/" + song.getId() + "/chord-chart").with(as(bob)))

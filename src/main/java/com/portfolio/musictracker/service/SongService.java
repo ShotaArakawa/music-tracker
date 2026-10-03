@@ -4,11 +4,13 @@ import com.portfolio.musictracker.chordchart.ChordChartService;
 import com.portfolio.musictracker.dto.SongDetailForm;
 import com.portfolio.musictracker.dto.SongDetailForm.SectionDto;
 import com.portfolio.musictracker.entity.AbstractSection;
+import com.portfolio.musictracker.entity.CustomStatus;
 import com.portfolio.musictracker.entity.LyricSection;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.Status;
 import com.portfolio.musictracker.entity.Tag;
 import com.portfolio.musictracker.entity.User;
+import com.portfolio.musictracker.repository.CustomStatusRepository;
 import com.portfolio.musictracker.repository.SongRepository;
 import com.portfolio.musictracker.repository.TagRepository;
 import com.portfolio.musictracker.storage.AudioStorage;
@@ -43,13 +45,16 @@ public class SongService {
     private final TagRepository tagRepository;
     private final AudioStorage audioStorage;
     private final ChordChartService chordChartService;
+    private final CustomStatusRepository customStatusRepository;
 
     public SongService(SongRepository songRepository, TagRepository tagRepository,
-                       AudioStorage audioStorage, ChordChartService chordChartService) {
+                       AudioStorage audioStorage, ChordChartService chordChartService,
+                       CustomStatusRepository customStatusRepository) {
         this.songRepository = songRepository;
         this.tagRepository = tagRepository;
         this.audioStorage = audioStorage;
         this.chordChartService = chordChartService;
+        this.customStatusRepository = customStatusRepository;
     }
 
     /**
@@ -89,34 +94,74 @@ public class SongService {
     }
 
     /**
-     * 曲を保存する（新規 or 編集フォームからの更新）。
-     * <ul>
-     *     <li>新規: ログインユーザーを所有者に設定し、一覧末尾（listOrder = 最大値+1）に追加</li>
-     *     <li>更新: 既存曲の所有権を確認し、フォーム項目（曲名・ステータス・メモ・タグ）のみ反映。
-     *         歌詞/コード/進捗などは保持する</li>
-     * </ul>
+     * 曲一覧の「新規追加」行から曲を登録する。ログインユーザーの曲として一覧の先頭に追加する。
+     *
+     * @param title    曲名（必須）
+     * @param status   ステータスのキー（空なら「作詞中」）
+     * @param tagId    タグID（空ならタグなし）
+     * @param deadline 納期 {@code yyyy-MM-dd}（空なら未設定）
      */
     @Transactional
-    public Song save(Song form, List<Long> tagIds, User user) {
-        Set<Tag> resolvedTags = new HashSet<>();
-        if (tagIds != null && !tagIds.isEmpty()) {
-            // 自分のタグだけを付けられる（他人のタグIDは無視）
-            resolvedTags.addAll(tagRepository.findByIdInAndUser(tagIds, user));
+    public Song create(User user, String title, String status, String tagId, String deadline) {
+        Song song = new Song();
+        song.setUser(user);
+        song.setTitle(requireTitle(title));
+        if (status != null && !status.isBlank()) {
+            applyStatus(song, status, user);
         }
-        if (form.getId() == null) {
-            form.setUser(user);
-            form.setTags(resolvedTags);
-            form.setListOrder(songRepository.findMaxListOrderByUser(user) + 1);
-            form.setDeadlineDone(form.isCompleted());
-            return songRepository.save(form);
+        applyTag(song, tagId, user);
+        song.setDeadline(parseDeadline(deadline));
+        song.setListOrder(songRepository.findMinListOrderByUser(user) - 1);
+        return songRepository.save(song);
+    }
+
+    private static String requireTitle(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("曲名は必須です");
         }
-        // 更新：所有権チェックのうえ、フォーム項目だけを既存エンティティへ反映
-        Song existing = findOwned(form.getId(), user);
-        existing.setTitle(form.getTitle());
-        existing.changeStatus(form.getStatus());
-        existing.setMemo(form.getMemo());
-        existing.setTags(resolvedTags);
-        return songRepository.save(existing);
+        String title = value.trim();
+        if (title.length() > 200) {
+            throw new IllegalArgumentException("曲名は200文字以内で入力してください");
+        }
+        return title;
+    }
+
+    /** ステータスのキー（既定は ARRANGING など、追加したものは custom:12）を曲に反映する。 */
+    private void applyStatus(Song song, String value, User user) {
+        if (value != null && value.startsWith(CustomStatus.KEY_PREFIX)) {
+            try {
+                Long id = Long.valueOf(value.substring(CustomStatus.KEY_PREFIX.length()));
+                // 自分が追加したステータスだけを選べる
+                song.changeStatus(customStatusRepository.findByIdAndUser(id, user)
+                        .orElseThrow(() -> new IllegalArgumentException("不正なステータスです: " + value)));
+                return;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("不正なステータスです: " + value);
+            }
+        }
+        try {
+            song.changeStatus(Status.valueOf(value));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new IllegalArgumentException("不正なステータスです: " + value);
+        }
+    }
+
+    /** タグ（単一選択）を曲に反映する。空ならタグなし。 */
+    private void applyTag(Song song, String value, User user) {
+        Set<Tag> tags = new HashSet<>();
+        if (value != null && !value.isBlank()) {
+            Long tagId;
+            try {
+                tagId = Long.valueOf(value.trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("不正なタグIDです: " + value);
+            }
+            // 自分のタグだけを付けられる
+            Tag tag = tagRepository.findByIdAndUser(tagId, user)
+                    .orElseThrow(() -> new IllegalArgumentException("タグが見つかりません: " + value));
+            tags.add(tag);
+        }
+        song.setTags(tags);
     }
 
     /**
@@ -220,39 +265,13 @@ public class SongService {
             throw new IllegalArgumentException("フィールド名が指定されていません");
         }
         switch (field) {
-            case "title" -> {
-                if (value == null || value.isBlank()) {
-                    throw new IllegalArgumentException("曲名は必須です");
-                }
-                song.setTitle(value.trim());
-            }
+            case "title" -> song.setTitle(requireTitle(value));
             case "memo" -> song.setMemo(value);
             case "deadline" -> song.setDeadline(parseDeadline(value));
             // 「完了」チェックはステータス「完了」と連動する
             case "deadlineDone" -> song.markCompleted(Boolean.parseBoolean(value));
-            case "status" -> {
-                try {
-                    song.changeStatus(Status.valueOf(value));
-                } catch (IllegalArgumentException | NullPointerException e) {
-                    throw new IllegalArgumentException("不正なステータスです: " + value);
-                }
-            }
-            case "tagId" -> {
-                Set<Tag> tags = new HashSet<>();
-                if (value != null && !value.isBlank()) {
-                    Long tagId;
-                    try {
-                        tagId = Long.valueOf(value.trim());
-                    } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("不正なタグIDです: " + value);
-                    }
-                    // 自分のタグだけを付けられる
-                    Tag tag = tagRepository.findByIdAndUser(tagId, user)
-                            .orElseThrow(() -> new IllegalArgumentException("タグが見つかりません: " + value));
-                    tags.add(tag);
-                }
-                song.setTags(tags);
-            }
+            case "status" -> applyStatus(song, value, user);
+            case "tagId" -> applyTag(song, value, user);
             default -> throw new IllegalArgumentException("更新できない項目です: " + field);
         }
         return songRepository.save(song);
@@ -294,12 +313,19 @@ public class SongService {
 
     /**
      * 作曲コア画面の「変更を保存」を一括で反映する。
-     * 進捗、歌詞セクションの追加・削除・並び替え・名前変更・本文編集、コード譜（表）をまとめて保存する。
-     * BPM・Key・世界観は画面から外したため変更しない（保存済みの値を残す）。
+     * Key・BPM・進捗、歌詞セクションの追加・削除・並び替え・名前変更・本文編集、コード譜（表）をまとめて保存する。
+     * 世界観は画面から外したため変更しない（保存済みの値を残す）。Key・BPM が送られてこなければ変更しない。
      */
     @Transactional
     public void saveDetail(Long id, SongDetailForm form, User user) {
         Song song = findOwned(id, user);
+
+        if (form.getMusicKey() != null) {
+            song.setMusicKey(normalizeKey(form.getMusicKey()));
+        }
+        if (form.getBpm() != null) {
+            song.setBpm(validateBpm(form.getBpm()));
+        }
 
         song.setLyricProgress(clampPercent(form.getLyricProgress()));
         song.setArrangementProgress(clampPercent(form.getArrangementProgress()));
@@ -354,6 +380,28 @@ public class SongService {
 
     private String normalizeName(String name) {
         return (name == null || name.isBlank()) ? "無題" : name.trim();
+    }
+
+    public static final int MIN_BPM = 1;
+    public static final int MAX_BPM = 999;
+
+    private static int validateBpm(int bpm) {
+        if (bpm < MIN_BPM || bpm > MAX_BPM) {
+            throw new IllegalArgumentException("BPM は " + MIN_BPM + "〜" + MAX_BPM + " の数値で入力してください");
+        }
+        return bpm;
+    }
+
+    /** Key を整える（空なら既定の C）。 */
+    private static String normalizeKey(String key) {
+        String k = key.trim();
+        if (k.isEmpty()) {
+            return Song.DEFAULT_KEY;
+        }
+        if (k.length() > 20) {
+            throw new IllegalArgumentException("Key は20文字以内で指定してください");
+        }
+        return k;
     }
 
     private int clampPercent(int value) {

@@ -73,12 +73,19 @@ public class ChordChartController {
         return chordChartService.importFile(file);
     }
 
-    /** 表示中の表を Excel（format=xlsx）または PDF（format=pdf）にして返す。 */
+    /**
+     * 表示中の表を Excel（format=xlsx）または PDF（format=pdf）にして返す。
+     * タイトル下の Key / BPM 欄には、画面で選んでいる Key・BPM（key / bpm。省略時は曲に保存済みの値）を入れる。
+     */
     @PostMapping("/export")
     public ResponseEntity<byte[]> export(@PathVariable Long id, @RequestParam("format") String format,
+                                         @RequestParam(name = "key", required = false) String key,
+                                         @RequestParam(name = "bpm", required = false) Integer bpm,
                                          @RequestBody ChordSheet sheet,
                                          @AuthenticationPrincipal CustomUserDetails principal) {
         Song song = songService.findOwned(id, principal.getUser());
+        ChordChartService.withKeyBpm(sheet, song.getTitle(),
+                key != null ? key : song.getMusicKey(), bpm != null ? bpm : song.getBpm());
         String baseName = "コード譜_" + safeFileName(song.getTitle());
         return switch (format) {
             case "xlsx" -> file(chordChartService.exportXlsx(sheet), XLSX, baseName + ".xlsx");

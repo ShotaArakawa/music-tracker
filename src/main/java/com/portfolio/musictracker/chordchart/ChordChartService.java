@@ -12,8 +12,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * コード譜の保存・テンプレートからの作成・インポート／エクスポートを担う。
@@ -69,9 +71,56 @@ public class ChordChartService {
             throw new UncheckedIOException(e);
         }
         setValue(sheet, template.getTitleCell(), song.getTitle());
-        String key = StringUtils.hasText(song.getMusicKey()) ? song.getMusicKey().trim() : "C";
-        String bpm = song.getBpm() == null ? "000" : String.valueOf(song.getBpm());
-        setValue(sheet, template.getKeyBpmCell(), "Key：" + key + "　BPM：" + bpm);
+        setValue(sheet, template.getKeyBpmCell(), keyBpmText(song.getMusicKey(), song.getBpm()));
+        return sheet;
+    }
+
+    /** タイトル下に入れる「Key：C　BPM：120」の文字列。未設定なら既定値（C / 120）。 */
+    public static String keyBpmText(String key, Integer bpm) {
+        String k = StringUtils.hasText(key) ? key.trim() : Song.DEFAULT_KEY;
+        int b = bpm == null ? Song.DEFAULT_BPM : bpm;
+        return "Key：" + k + "　BPM：" + b;
+    }
+
+    /** 「Key：…」で始まるセル（テンプレートの Key / BPM 欄）。 */
+    private static final Pattern KEY_BPM_CELL =
+            Pattern.compile("^\\s*key\\s*[:：].*", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 書き出す表のタイトル下に、現在の Key と BPM を入れる。
+     * <ul>
+     *     <li>Key / BPM 欄（「Key：…」のセル）があれば、その内容を置き換える</li>
+     *     <li>なければ、曲名のセルの1つ下が空いていればそこに入れる</li>
+     * </ul>
+     * どちらも見つからない表（独自のレイアウトなど）は変更しない。
+     */
+    public static ChordSheet withKeyBpm(ChordSheet sheet, String title, String key, Integer bpm) {
+        if (sheet == null || sheet.getData() == null) {
+            return sheet;
+        }
+        String text = keyBpmText(key, bpm);
+        List<List<String>> data = sheet.getData();
+        for (List<String> row : data) {
+            for (int c = 0; c < row.size(); c++) {
+                if (row.get(c) != null && KEY_BPM_CELL.matcher(row.get(c)).matches()) {
+                    row.set(c, text);
+                    return sheet;
+                }
+            }
+        }
+        String t = title == null ? "" : title.trim();
+        for (int r = 0; r + 1 < data.size() && !t.isEmpty(); r++) {
+            List<String> row = data.get(r);
+            for (int c = 0; c < row.size(); c++) {
+                if (row.get(c) != null && row.get(c).trim().equals(t)) {
+                    List<String> below = data.get(r + 1);
+                    if (c < below.size() && !StringUtils.hasText(below.get(c))) {
+                        below.set(c, text);
+                    }
+                    return sheet;
+                }
+            }
+        }
         return sheet;
     }
 

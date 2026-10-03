@@ -44,7 +44,8 @@ class LyricsControllerTest extends IntegrationTestSupport {
         Song song = createSong(alice, "夜明けのプロローグ");
         String text = new String(export(song, "txt"), StandardCharsets.UTF_8);
 
-        assertThat(text).isEqualTo("夜明けのプロローグ\r\n\r\n"
+        // Key・BPM を送らなければ曲の値（新しい曲は既定の C / 120）をタイトルの下に入れる
+        assertThat(text).isEqualTo("夜明けのプロローグ\r\nKey：C　BPM：120\r\n\r\n"
                 + "【Aメロ】\r\n眠れない夜の隅で\r\n時計の針だけが進む\r\n\r\n"
                 + "【サビ】\r\n夜明けよ来い\r\n\r\n声にして\r\n");
     }
@@ -67,6 +68,36 @@ class LyricsControllerTest extends IntegrationTestSupport {
         try (PDDocument doc = Loader.loadPDF(export(song, "pdf"))) {
             String text = new PDFTextStripper().getText(doc);
             assertThat(text).contains("夜明けのプロローグ", "【Aメロ】", "眠れない夜の隅で", "【サビ】", "声にして");
+        }
+    }
+
+    @Test
+    void 画面で選んだKeyとBPMをタイトルの下に入れる() throws Exception {
+        Song song = createSong(alice, "夜明けのプロローグ");
+        String body = "{\"musicKey\":\"F#m\",\"bpm\":98,\"sections\":[{\"name\":\"サビ\",\"content\":\"声にして\"}]}";
+        for (String format : new String[]{"txt", "docx", "pdf"}) {
+            byte[] bytes = mockMvc.perform(post("/songs/" + song.getId() + "/lyrics/export").param("format", format)
+                            .with(as(alice)).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsByteArray();
+            String text = switch (format) {
+                case "txt" -> new String(bytes, StandardCharsets.UTF_8);
+                case "docx" -> {
+                    try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(bytes));
+                         XWPFWordExtractor extractor = new XWPFWordExtractor(doc)) {
+                        yield extractor.getText();
+                    }
+                }
+                default -> {
+                    try (PDDocument doc = Loader.loadPDF(bytes)) {
+                        yield new PDFTextStripper().getText(doc);
+                    }
+                }
+            };
+            assertThat(text).as(format).contains("Key：F#m", "BPM：98");
+            assertThat(text.indexOf("夜明けのプロローグ")).as(format).isLessThan(text.indexOf("Key："));
+            assertThat(text.indexOf("BPM：98")).as(format).isLessThan(text.indexOf("【サビ】"));
         }
     }
 

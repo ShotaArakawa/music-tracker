@@ -3,6 +3,7 @@ package com.portfolio.musictracker;
 import com.portfolio.musictracker.chordchart.ChordChartRepository;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.User;
+import com.portfolio.musictracker.repository.CustomStatusRepository;
 import com.portfolio.musictracker.repository.SongRepository;
 import com.portfolio.musictracker.repository.TagRepository;
 import com.portfolio.musictracker.repository.UserRepository;
@@ -43,6 +44,8 @@ public abstract class IntegrationTestSupport {
     private ChordChartRepository chordChartRepository;
     @Autowired
     protected TagRepository tagRepository;
+    @Autowired
+    protected CustomStatusRepository customStatusRepository;
 
     protected User alice;
     protected User bob;
@@ -52,6 +55,7 @@ public abstract class IntegrationTestSupport {
         chordChartRepository.deleteAll();
         songRepository.deleteAll();
         tagRepository.deleteAll();
+        customStatusRepository.deleteAll();
         userRepository.deleteAll();
         alice = userRepository.save(new User("alice", "{noop}x", "alice@example.test", "USER"));
         bob = userRepository.save(new User("bob", "{noop}x", "bob@example.test", "USER"));

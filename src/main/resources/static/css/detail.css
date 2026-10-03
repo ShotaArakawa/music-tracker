@@ -81,6 +81,56 @@ body { background-color: #f4f5f7; margin: 0; }
 .studio-tab:hover { color: #0d6efd; }
 .studio-tab.active { color: #0d6efd; border-bottom-color: #0d6efd; }
 
+/* 歌詞タブの右: Key / BPM */
+.tabs-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.music-meta {
+    display: flex; align-items: center; gap: .9rem;
+    padding-left: 1rem; border-left: 1px solid #e3e6ea;
+}
+.key-wrap { position: relative; display: flex; align-items: center; gap: .4rem; }
+.bpm-wrap { display: flex; align-items: center; gap: .4rem; margin: 0; }
+.meta-label { font-size: .78rem; font-weight: 700; color: #5c6670; }
+.meta-field {
+    height: 2.1rem;
+    border: 1px solid #d7dde4; border-radius: .45rem; background: #fff;
+    font-weight: 700; color: #1b3a6b; font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+.meta-field:hover { border-color: #9ec5fe; }
+.meta-field:focus { outline: none; border-color: #0d6efd; box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .15); }
+.key-btn { min-width: 4.6rem; display: inline-flex; align-items: center; justify-content: space-between; gap: .3rem; padding: 0 .55rem; }
+.key-btn .caret { font-size: .7rem; color: #8a929b; }
+.bpm-input { width: 4.6rem; text-align: center; padding: 0 .3rem; -moz-appearance: textfield; }
+.bpm-input::-webkit-outer-spin-button,
+.bpm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bpm-input.invalid { border-color: #dc3545; }
+
+/* 五度圏のポップアップ */
+.key-popover {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 1900;
+    background: #fff; border: 1px solid #dfe3e8; border-radius: .7rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+    padding: .6rem .7rem .7rem;
+}
+.key-popover-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    font-size: .82rem; font-weight: 700; color: #343a40; margin-bottom: .3rem; white-space: nowrap;
+}
+#circle-of-fifths { display: block; max-width: 78vw; height: auto; }
+.cof-seg { cursor: pointer; stroke: #fff; stroke-width: 2; transition: fill .1s ease; }
+.cof-seg.major { fill: #e7f1ff; }
+.cof-seg.minor { fill: #f3f0ff; }
+.cof-seg:hover, .cof-seg:focus { fill: #9ec5fe; outline: none; }
+.cof-seg.minor:hover, .cof-seg.minor:focus { fill: #c5b3f6; }
+.cof-seg.selected { fill: #0d6efd; }
+.cof-seg.minor.selected { fill: #6f42c1; }
+.cof-text { pointer-events: none; font-weight: 700; text-anchor: middle; dominant-baseline: central; fill: #1b3a6b; }
+.cof-text.major { font-size: 17px; }
+.cof-text.minor { font-size: 12.5px; fill: #4b2d83; }
+.cof-text.selected { fill: #fff; }
+.cof-center { fill: #f8f9fb; stroke: #e3e6ea; }
+.cof-center-text { font-size: 11px; fill: #6c757d; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+
 /* ---- 作業エリア（タブで1つずつ表示） ---- */
 #studio { padding: 1rem; }
 .panel { max-width: 1400px; margin: 0 auto; }
@@ -208,7 +258,10 @@ body { background-color: #f4f5f7; margin: 0; }
     .studio-bar { flex-direction: column; gap: .5rem; padding: 0 .6rem .5rem; }
     .audio-block { flex-basis: auto; }
     .studio-tabs { padding: 0 .6rem; }
-    .studio-tabs > nav { flex: 1 1 auto; }
+    /* スマホではタブの下に Key / BPM を並べる */
+    .tabs-left { flex: 1 1 auto; flex-wrap: wrap; gap: .3rem; }
+    .tabs-left > nav { flex: 1 1 100%; }
+    .music-meta { padding: 0 0 .45rem; border-left: 0; }
     .studio-tab { flex: 1 1 0; padding: .5rem .4rem; }
     .save-area { display: none; }
     .progress-block { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem .7rem; }

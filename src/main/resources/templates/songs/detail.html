@@ -20,8 +20,8 @@
             <h1 class="h5 mb-0 song-title">
                 🎼 <span class="title-text" th:text="${song.title}">曲名</span>
                 <span class="badge align-middle"
-                      th:classappend="${song.status.colorClass}"
-                      th:text="${song.status.label}">ステータス</span>
+                      th:classappend="${song.statusColorClass}"
+                      th:text="${song.statusLabel}">ステータス</span>
             </h1>
         </div>
         <div class="d-flex align-items-center gap-2 flex-shrink-0">
@@ -86,12 +86,39 @@
         </section>
     </div>
 
-    <!-- 作業の切り替えと保存 -->
+    <!-- 作業の切り替え・Key / BPM と保存 -->
     <div class="studio-tabs">
-        <nav class="d-flex" role="tablist" aria-label="作業の切り替え">
-            <button type="button" class="studio-tab active" role="tab" data-tab="chord" aria-selected="true">🎼 コード譜</button>
-            <button type="button" class="studio-tab" role="tab" data-tab="lyric" aria-selected="false">📝 歌詞</button>
-        </nav>
+        <div class="tabs-left">
+            <nav class="d-flex" role="tablist" aria-label="作業の切り替え">
+                <button type="button" class="studio-tab active" role="tab" data-tab="chord" aria-selected="true">🎼 コード譜</button>
+                <button type="button" class="studio-tab" role="tab" data-tab="lyric" aria-selected="false">📝 歌詞</button>
+            </nav>
+            <!-- 歌詞タブの右: Key（五度圏から選ぶ）と BPM（数値入力）。「変更を保存」で保存する -->
+            <div class="music-meta">
+                <div class="key-wrap">
+                    <span class="meta-label" id="key-label">Key</span>
+                    <button type="button" class="meta-field key-btn" id="key-btn" aria-haspopup="dialog"
+                            aria-expanded="false" aria-labelledby="key-label key-value"
+                            title="クリックして五度圏から Key を選ぶ">
+                        <span id="key-value" th:text="${song.musicKey != null and !#strings.isEmpty(song.musicKey)} ? ${song.musicKey} : 'C'">C</span>
+                        <span class="caret" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="key-popover" id="key-popover" role="dialog" aria-label="五度圏から Key を選ぶ" hidden>
+                        <div class="key-popover-head">
+                            <span>五度圏から選ぶ</span>
+                            <span class="small text-muted">外側: メジャー / 内側: マイナー</span>
+                        </div>
+                        <svg id="circle-of-fifths" viewBox="0 0 300 300" width="300" height="300"></svg>
+                    </div>
+                </div>
+                <label class="bpm-wrap" for="bpm-input">
+                    <span class="meta-label">BPM</span>
+                    <input type="number" class="meta-field bpm-input" id="bpm-input" min="1" max="999" step="1"
+                           inputmode="numeric" th:value="${song.bpm != null} ? ${song.bpm} : 120"
+                           title="キーボードで数値を入力（1〜999）">
+                </label>
+            </div>
+        </div>
         <div class="save-area">
             <span id="save-status" class="text-muted small"></span>
             <button type="button" id="save-all" class="btn btn-primary save-btn">💾 変更を保存</button>

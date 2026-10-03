@@ -6,13 +6,13 @@ import com.portfolio.musictracker.dto.SongDeadline;
 import com.portfolio.musictracker.dto.SongDetailForm;
 import com.portfolio.musictracker.dto.SongListSection;
 import com.portfolio.musictracker.entity.Song;
-import com.portfolio.musictracker.entity.Status;
 import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.security.CustomUserDetails;
 import com.portfolio.musictracker.service.ScheduleService;
 import com.portfolio.musictracker.service.SongService;
+import com.portfolio.musictracker.status.StatusColor;
+import com.portfolio.musictracker.status.StatusService;
 import com.portfolio.musictracker.storage.AudioStorage;
-import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
@@ -24,9 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,7 +35,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.net.URI;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,12 +49,14 @@ public class SongController {
     private final SongService songService;
     private final ScheduleService scheduleService;
     private final AudioStorage audioStorage;
+    private final StatusService statusService;
 
     public SongController(SongService songService, ScheduleService scheduleService,
-                          AudioStorage audioStorage) {
+                          AudioStorage audioStorage, StatusService statusService) {
         this.songService = songService;
         this.scheduleService = scheduleService;
         this.audioStorage = audioStorage;
+        this.statusService = statusService;
     }
 
     /** ダッシュボード（曲一覧）。tagId が指定されればタグで絞り込む。 */
@@ -70,13 +69,14 @@ public class SongController {
         model.addAttribute("sections", List.of(
                 new SongListSection("楽曲一覧", false,
                         songs.stream().filter(s -> !s.isCompleted()).toList(),
-                        "まだ曲が登録されていません。「＋ 新規登録」から追加してみましょう。"),
+                        "まだ曲がありません。上の行に曲名を入力して追加してみましょう。"),
                 new SongListSection("バックアップ一覧", true,
                         songs.stream().filter(Song::isCompleted).toList(),
                         "完了した曲はまだありません。「完了」にチェックすると、ここに移動します。")));
         model.addAttribute("tags", songService.findAllTags(user));
         model.addAttribute("selectedTagId", tagId);
-        model.addAttribute("statuses", Status.values());
+        model.addAttribute("statuses", statusService.options(user));
+        model.addAttribute("statusColors", StatusColor.values());
         model.addAttribute("lastOpenedSong", songService.findLastOpened(user).orElse(null));
         // 曲ID → 納期（日付・超過日数・対応済み）。期限超過の行の色分けに使う
         model.addAttribute("deadlines", scheduleService.deadlinesBySongId(songs));
@@ -92,46 +92,24 @@ public class SongController {
         return Map.of("status", "ok");
     }
 
-    /** 新規登録フォーム。 */
-    @GetMapping("/new")
-    public String newForm(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
-        model.addAttribute("song", new Song());
-        model.addAttribute("selectedTagIds", Collections.emptyList());
-        model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
-        model.addAttribute("statuses", Status.values());
-        return "songs/form";
-    }
-
-    /** 編集フォーム。 */
-    @GetMapping("/{id}/edit")
-    public String editForm(@PathVariable Long id,
-                           @AuthenticationPrincipal CustomUserDetails principal, Model model) {
-        Song song = songService.findOwned(id, principal.getUser());
-        model.addAttribute("song", song);
-        model.addAttribute("selectedTagIds", song.getTags().stream().map(t -> t.getId()).toList());
-        model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
-        model.addAttribute("statuses", Status.values());
-        return "songs/form";
-    }
-
-    /** 新規登録・更新の保存処理。 */
-    @PostMapping("/save")
-    public String save(@Valid @ModelAttribute("song") Song song,
-                       BindingResult bindingResult,
-                       @RequestParam(name = "tagIds", required = false) List<Long> tagIds,
-                       @AuthenticationPrincipal CustomUserDetails principal,
-                       Model model,
-                       RedirectAttributes redirectAttributes) {
-        if (bindingResult.hasErrors()) {
-            model.addAttribute("selectedTagIds", tagIds == null ? Collections.emptyList() : tagIds);
-            model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
-            model.addAttribute("statuses", Status.values());
-            return "songs/form";
+    /**
+     * 曲一覧の「新規追加」行から曲を登録する（Ajax）。
+     * リクエスト: {@code {"title": "曲名", "status": "ARRANGING", "tagId": "3", "deadline": "2026-10-31"}}
+     * （曲名以外は省略可）
+     */
+    @PostMapping
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> create(@RequestBody Map<String, String> body,
+                                                      @AuthenticationPrincipal CustomUserDetails principal) {
+        try {
+            Song song = songService.create(principal.getUser(), body.get("title"), body.get("status"),
+                    body.get("tagId"), body.get("deadline"));
+            Map<String, Object> response = buildFieldResponse(song);
+            response.put("id", song.getId());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
-        Song saved = songService.save(song, tagIds, principal.getUser());
-        redirectAttributes.addFlashAttribute("message",
-                "「" + saved.getTitle() + "」を保存しました。");
-        return "redirect:/songs";
     }
 
     /** 削除処理。 */
@@ -257,9 +235,9 @@ public class SongController {
         response.put("deadlineDate", d == null ? null : d.date().toString());
         response.put("daysUntil", d == null ? null : d.daysUntil());
         response.put("overdue", d != null && d.isOverdue());
-        response.put("statusName", song.getStatus().name());
-        response.put("statusLabel", song.getStatus().getLabel());
-        response.put("statusColorClass", song.getStatus().getColorClass());
+        response.put("statusName", song.getStatusKey());
+        response.put("statusLabel", song.getStatusLabel());
+        response.put("statusColorClass", song.getStatusColorClass());
         List<Map<String, Object>> tags = song.getTags().stream()
                 .map(t -> {
                     Map<String, Object> m = new LinkedHashMap<>();
