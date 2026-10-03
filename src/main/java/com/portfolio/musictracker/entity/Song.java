@@ -45,9 +45,16 @@ public class Song {
     @Column(length = 1000)
     private String memo;
 
-    /** 納期（締め切り）。「6/4」などの月日やフリーテキストでサッと入力できるよう文字列で保持する。 */
+    /**
+     * 納期（締め切り）。画面のカレンダーから選んだ日付を {@code yyyy-MM-dd} で保持する。
+     * 以前の自由入力（「6/4」など）の値も残っていれば {@code DeadlineParser} で日付として解釈する。
+     */
     @Column(length = 50)
     private String deadline;
+
+    /** 納期の対応が済んだか。チェックされた曲は納期を過ぎても超過として警告しない。 */
+    @Column(nullable = false)
+    private boolean deadlineDone = false;
 
     @NotNull(message = "ステータスを選択してください")
     @Enumerated(EnumType.STRING)
@@ -87,7 +94,7 @@ public class Song {
     @Column(nullable = false)
     private int lyricProgress = 0;
 
-    /** メロディの進捗率（0〜100）。 */
+    /** メロディの進捗率（0〜100）。画面からは廃止したが、保存済みの値を残すため列は維持する。 */
     @Column(nullable = false)
     private int melodyProgress = 0;
 
@@ -148,6 +155,14 @@ public class Song {
 
     public void setDeadline(String deadline) {
         this.deadline = deadline;
+    }
+
+    public boolean isDeadlineDone() {
+        return deadlineDone;
+    }
+
+    public void setDeadlineDone(boolean deadlineDone) {
+        this.deadlineDone = deadlineDone;
     }
 
     public Status getStatus() {
@@ -276,8 +291,8 @@ public class Song {
         this.lastOpenedAt = lastOpenedAt;
     }
 
-    /** 3つの進捗率の平均を全体の進捗率（%）として返す。 */
+    /** 作詞と編曲の進捗率の平均を全体の進捗率（%）として返す。 */
     public int getOverallProgress() {
-        return Math.round((lyricProgress + melodyProgress + arrangementProgress) / 3.0f);
+        return Math.round((lyricProgress + arrangementProgress) / 2.0f);
     }
 }

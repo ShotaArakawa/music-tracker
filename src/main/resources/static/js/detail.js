@@ -116,15 +116,13 @@ function bindMetric(numId) {
 
 function updateOverall() {
     const l = clampPct(parseInt(document.getElementById('lyricProgress').value, 10));
-    const m = clampPct(parseInt(document.getElementById('melodyProgress').value, 10));
     const a = clampPct(parseInt(document.getElementById('arrangementProgress').value, 10));
-    const overall = Math.round((l + m + a) / 3);
+    const overall = Math.round((l + a) / 2);
     document.getElementById('overallVal').textContent = overall;
     document.getElementById('overallBar').style.width = overall + '%';
 }
 
 bindMetric('lyricProgress');
-bindMetric('melodyProgress');
 bindMetric('arrangementProgress');
 
 /* =========================================================
@@ -159,7 +157,6 @@ function collectSections(area) {
 function gather() {
     return {
         lyricProgress: clampPct(parseInt(document.getElementById('lyricProgress').value, 10)),
-        melodyProgress: clampPct(parseInt(document.getElementById('melodyProgress').value, 10)),
         arrangementProgress: clampPct(parseInt(document.getElementById('arrangementProgress').value, 10)),
         lyricSections: collectSections('lyric'),
         chordSheet: ChordEditor.getSheet()

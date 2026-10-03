@@ -5,6 +5,7 @@ import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.User;
 import com.portfolio.musictracker.repository.SectionTemplateRepository;
 import com.portfolio.musictracker.repository.SongRepository;
+import com.portfolio.musictracker.repository.TagRepository;
 import com.portfolio.musictracker.repository.UserRepository;
 import com.portfolio.musictracker.security.CustomUserDetails;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,8 @@ public abstract class IntegrationTestSupport {
     private TransactionTemplate transactionTemplate;
     @Autowired
     private ChordChartRepository chordChartRepository;
+    @Autowired
+    protected TagRepository tagRepository;
 
     protected User alice;
     protected User bob;
@@ -52,6 +55,7 @@ public abstract class IntegrationTestSupport {
         chordChartRepository.deleteAll();
         templateRepository.deleteAll();
         songRepository.deleteAll();
+        tagRepository.deleteAll();
         userRepository.deleteAll();
         alice = userRepository.save(new User("alice", "{noop}x", "alice@example.test", "USER"));
         bob = userRepository.save(new User("bob", "{noop}x", "bob@example.test", "USER"));

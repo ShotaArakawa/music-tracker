@@ -21,7 +21,9 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,8 +78,9 @@ public class SongService {
         return song;
     }
 
-    public List<Tag> findAllTags() {
-        return tagRepository.findAll();
+    /** ログインユーザーのタグ（作成順）。 */
+    public List<Tag> findAllTags(User user) {
+        return tagRepository.findByUserOrderByIdAsc(user);
     }
 
     /** 直近で詳細画面を開いた曲（なければ空）。ログインユーザーのものに限る。 */
@@ -97,7 +100,8 @@ public class SongService {
     public Song save(Song form, List<Long> tagIds, User user) {
         Set<Tag> resolvedTags = new HashSet<>();
         if (tagIds != null && !tagIds.isEmpty()) {
-            resolvedTags.addAll(tagRepository.findAllById(tagIds));
+            // 自分のタグだけを付けられる（他人のタグIDは無視）
+            resolvedTags.addAll(tagRepository.findByIdInAndUser(tagIds, user));
         }
         if (form.getId() == null) {
             form.setUser(user);
@@ -203,8 +207,9 @@ public class SongService {
     /**
      * 一覧画面のインライン編集から、1項目だけを更新する。
      *
-     * @param field 更新対象（title / memo / status / tagId）
-     * @param value 新しい値（文字列）
+     * @param field 更新対象（title / memo / deadline / deadlineDone / status / tagId）
+     * @param value 新しい値（文字列）。deadline は {@code yyyy-MM-dd}（空なら納期なし）、
+     *              deadlineDone は {@code true} / {@code false}
      * @return 更新後の曲
      */
     @Transactional
@@ -221,7 +226,8 @@ public class SongService {
                 song.setTitle(value.trim());
             }
             case "memo" -> song.setMemo(value);
-            case "deadline" -> song.setDeadline(value == null || value.isBlank() ? null : value.trim());
+            case "deadline" -> song.setDeadline(parseDeadline(value));
+            case "deadlineDone" -> song.setDeadlineDone(Boolean.parseBoolean(value));
             case "status" -> {
                 try {
                     song.setStatus(Status.valueOf(value));
@@ -238,7 +244,8 @@ public class SongService {
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException("不正なタグIDです: " + value);
                     }
-                    Tag tag = tagRepository.findById(tagId)
+                    // 自分のタグだけを付けられる
+                    Tag tag = tagRepository.findByIdAndUser(tagId, user)
                             .orElseThrow(() -> new IllegalArgumentException("タグが見つかりません: " + value));
                     tags.add(tag);
                 }
@@ -247,6 +254,18 @@ public class SongService {
             default -> throw new IllegalArgumentException("更新できない項目です: " + field);
         }
         return songRepository.save(song);
+    }
+
+    /** カレンダーで選んだ日付（yyyy-MM-dd）を検証する。空なら納期なし（null）。 */
+    private static String parseDeadline(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim()).toString();
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("納期の日付が正しくありません: " + value);
+        }
     }
 
     /**
@@ -281,7 +300,6 @@ public class SongService {
         Song song = findOwned(id, user);
 
         song.setLyricProgress(clampPercent(form.getLyricProgress()));
-        song.setMelodyProgress(clampPercent(form.getMelodyProgress()));
         song.setArrangementProgress(clampPercent(form.getArrangementProgress()));
 
         reconcileSections(song, song.getLyricSections(), form.getLyricSections(),

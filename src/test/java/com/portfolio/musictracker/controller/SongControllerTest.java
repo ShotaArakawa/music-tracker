@@ -110,6 +110,57 @@ class SongControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    void 納期はカレンダーの日付で保存し不正な値は拒否する() throws Exception {
+        Song song = createSong(alice, "曲");
+        String overdue = java.time.LocalDate.now().minusDays(3).toString();
+
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadline\",\"value\":\"" + overdue + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deadlineDate").value(overdue))
+                .andExpect(jsonPath("$.daysUntil").value(-3))
+                .andExpect(jsonPath("$.overdue").value(true));
+        assertThat(songRepository.findById(song.getId()).orElseThrow().getDeadline()).isEqualTo(overdue);
+
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadline\",\"value\":\"来週くらい\"}"))
+                .andExpect(status().isBadRequest());
+        // 空で送ると納期なし
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadline\",\"value\":\"\"}"))
+                .andExpect(status().isOk());
+        assertThat(songRepository.findById(song.getId()).orElseThrow().getDeadline()).isNull();
+    }
+
+    @Test
+    void 期限超過の曲は行の色で示し完了チェックで警告しない() throws Exception {
+        Song song = createSong(alice, "締切切れ");
+        song.setDeadline(java.time.LocalDate.now().minusDays(5).toString());
+        songRepository.save(song);
+
+        String html = mockMvc.perform(get("/songs").with(as(alice)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("table-danger").contains("5日超過")
+                .doesNotContain("期限が迫っている曲があります");
+
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadlineDone\",\"value\":\"true\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue").value(false))
+                .andExpect(jsonPath("$.deadlineDone").value(true));
+        String after = mockMvc.perform(get("/songs").with(as(alice)))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(after).doesNotContain("table-danger").doesNotContain("5日超過");
+        mockMvc.perform(get("/reminders/run").with(as(alice)))
+                .andExpect(jsonPath("$.overdueCount").value(0));
+    }
+
+    @Test
     void 未ログインはログイン画面へ() throws Exception {
         mockMvc.perform(get("/songs"))
                 .andExpect(status().is3xxRedirection())

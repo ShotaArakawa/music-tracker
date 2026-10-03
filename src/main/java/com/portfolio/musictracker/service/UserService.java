@@ -19,10 +19,12 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TagService tagService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, TagService tagService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.tagService = tagService;
     }
 
     /**
@@ -41,7 +43,10 @@ public class UserService {
             throw new IllegalArgumentException("そのメールアドレスはすでに登録されています");
         }
         User user = new User(username, passwordEncoder.encode(form.getPassword()), email, "USER");
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        // 新しいユーザーには既定のタグ（ボカロ / バンド / コンペ）を用意する
+        tagService.ensureDefaultTags(saved);
+        return saved;
     }
 
     /** ID 指定でユーザーを取得する。 */

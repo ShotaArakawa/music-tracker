@@ -2,6 +2,7 @@ package com.portfolio.musictracker.controller;
 
 import com.portfolio.musictracker.chordchart.ChordChartTemplate;
 import com.portfolio.musictracker.dto.FieldUpdateRequest;
+import com.portfolio.musictracker.dto.SongDeadline;
 import com.portfolio.musictracker.dto.SongDetailForm;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.Status;
@@ -63,13 +64,14 @@ public class SongController {
     public String list(@RequestParam(name = "tagId", required = false) Long tagId,
                        @AuthenticationPrincipal CustomUserDetails principal, Model model) {
         User user = principal.getUser();
-        model.addAttribute("songs", songService.findSongs(user, tagId));
-        model.addAttribute("tags", songService.findAllTags());
+        List<Song> songs = songService.findSongs(user, tagId);
+        model.addAttribute("songs", songs);
+        model.addAttribute("tags", songService.findAllTags(user));
         model.addAttribute("selectedTagId", tagId);
         model.addAttribute("statuses", Status.values());
         model.addAttribute("lastOpenedSong", songService.findLastOpened(user).orElse(null));
-        // 納期が迫っている／超過している曲のアラート（ログインユーザーのものに限る）
-        model.addAttribute("alerts", scheduleService.findAlerts(user));
+        // 曲ID → 納期（日付・超過日数・対応済み）。期限超過の行の色分けに使う
+        model.addAttribute("deadlines", scheduleService.deadlinesBySongId(songs));
         return "songs/list";
     }
 
@@ -84,10 +86,10 @@ public class SongController {
 
     /** 新規登録フォーム。 */
     @GetMapping("/new")
-    public String newForm(Model model) {
+    public String newForm(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
         model.addAttribute("song", new Song());
         model.addAttribute("selectedTagIds", Collections.emptyList());
-        model.addAttribute("allTags", songService.findAllTags());
+        model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
         model.addAttribute("statuses", Status.values());
         return "songs/form";
     }
@@ -99,7 +101,7 @@ public class SongController {
         Song song = songService.findOwned(id, principal.getUser());
         model.addAttribute("song", song);
         model.addAttribute("selectedTagIds", song.getTags().stream().map(t -> t.getId()).toList());
-        model.addAttribute("allTags", songService.findAllTags());
+        model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
         model.addAttribute("statuses", Status.values());
         return "songs/form";
     }
@@ -114,7 +116,7 @@ public class SongController {
                        RedirectAttributes redirectAttributes) {
         if (bindingResult.hasErrors()) {
             model.addAttribute("selectedTagIds", tagIds == null ? Collections.emptyList() : tagIds);
-            model.addAttribute("allTags", songService.findAllTags());
+            model.addAttribute("allTags", songService.findAllTags(principal.getUser()));
             model.addAttribute("statuses", Status.values());
             return "songs/form";
         }
@@ -241,6 +243,12 @@ public class SongController {
         response.put("title", song.getTitle());
         response.put("memo", song.getMemo());
         response.put("deadline", song.getDeadline());
+        response.put("deadlineDone", song.isDeadlineDone());
+        // 納期を日付として解釈できた場合の日付・残り日数・超過（行の色分けに使う）
+        SongDeadline d = scheduleService.deadlinesBySongId(List.of(song)).get(song.getId());
+        response.put("deadlineDate", d == null ? null : d.date().toString());
+        response.put("daysUntil", d == null ? null : d.daysUntil());
+        response.put("overdue", d != null && d.isOverdue());
         response.put("statusName", song.getStatus().name());
         response.put("statusLabel", song.getStatus().getLabel());
         response.put("statusColorClass", song.getStatus().getColorClass());

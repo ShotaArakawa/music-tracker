@@ -12,13 +12,11 @@
 <body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})},data-chord-url=@{/songs/{id}/chord-chart(id=${song.id})}">
 
 <!-- ===== スクロール追従ヘッダー =====
-     1段目: 戻る・曲名・保存 / 2段目: 進捗率（左）とデモ音源（右） / 3段目: 作業の切り替えタブ -->
+     1段目: 楽曲一覧へ戻る・曲名 / 2段目: 進捗率とデモ音源 / 3段目: 作業の切り替えタブと保存 -->
 <header class="core-header">
     <div class="top-bar">
-        <div class="d-flex align-items-center gap-2 min-w-0">
-            <a th:href="@{/songs}" class="btn btn-sm btn-outline-secondary flex-shrink-0">← 一覧</a>
-            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-               title="カレンダー">📅<span class="d-none d-lg-inline"> カレンダー</span></a>
+        <div class="d-flex align-items-center gap-3 min-w-0">
+            <a th:href="@{/songs}" class="btn btn-outline-primary back-btn flex-shrink-0">← 楽曲一覧</a>
             <h1 class="h5 mb-0 song-title">
                 🎼 <span class="title-text" th:text="${song.title}">曲名</span>
                 <span class="badge align-middle"
@@ -27,8 +25,6 @@
             </h1>
         </div>
         <div class="d-flex align-items-center gap-2 flex-shrink-0">
-            <span id="save-status" class="text-muted small"></span>
-            <button type="button" id="save-all" class="btn btn-primary">💾 変更を保存</button>
             <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary"
                title="プロフィール設定">👤<span class="d-none d-lg-inline" th:text="' ' + ${currentUsername}"> user</span></a>
             <form th:action="@{/logout}" method="post" class="m-0">
@@ -38,7 +34,7 @@
     </div>
 
     <div class="studio-bar">
-        <!-- 左: 進捗率（横長ブロック） -->
+        <!-- 左: 進捗率（作詞・編曲・全体の横長ブロック） -->
         <section class="progress-block" aria-label="進捗率">
             <div class="metric" data-metric="lyric">
                 <div class="metric-head">
@@ -48,15 +44,6 @@
                 </div>
                 <input type="range" class="pct-range" data-for="lyricProgress" min="0" max="100" step="5"
                        th:value="${song.lyricProgress}" aria-label="作詞の進捗率">
-            </div>
-            <div class="metric" data-metric="melody">
-                <div class="metric-head">
-                    <span>メロディ</span>
-                    <span><input type="number" class="pct-input" id="melodyProgress" min="0" max="100"
-                                 th:value="${song.melodyProgress}" title="数値を直接入力できます">%</span>
-                </div>
-                <input type="range" class="pct-range" data-for="melodyProgress" min="0" max="100" step="5"
-                       th:value="${song.melodyProgress}" aria-label="メロディの進捗率">
             </div>
             <div class="metric" data-metric="arrangement">
                 <div class="metric-head">
@@ -79,7 +66,7 @@
             </div>
         </section>
 
-        <!-- 右: デモ音源 -->
+        <!-- 進捗率の横: デモ音源 -->
         <section class="audio-block" aria-label="デモ音源">
             <span class="block-label">🎧 デモ音源</span>
             <audio th:if="${song.audioFilePath != null}" controls preload="metadata"
@@ -99,11 +86,17 @@
         </section>
     </div>
 
-    <!-- 作業の切り替え -->
-    <nav class="studio-tabs" role="tablist" aria-label="作業の切り替え">
-        <button type="button" class="studio-tab active" role="tab" data-tab="lyric" aria-selected="true">📝 歌詞</button>
-        <button type="button" class="studio-tab" role="tab" data-tab="chord" aria-selected="false">🎼 コード譜</button>
-    </nav>
+    <!-- 作業の切り替えと保存 -->
+    <div class="studio-tabs">
+        <nav class="d-flex" role="tablist" aria-label="作業の切り替え">
+            <button type="button" class="studio-tab active" role="tab" data-tab="lyric" aria-selected="true">📝 歌詞</button>
+            <button type="button" class="studio-tab" role="tab" data-tab="chord" aria-selected="false">🎼 コード譜</button>
+        </nav>
+        <div class="save-area">
+            <span id="save-status" class="text-muted small"></span>
+            <button type="button" id="save-all" class="btn btn-primary btn-sm">💾 変更を保存</button>
+        </div>
+    </div>
 </header>
 
 <!-- アップロード等のメッセージ -->
