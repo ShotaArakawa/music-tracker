@@ -22,6 +22,7 @@
 - 「🎼 コード譜」「📝 歌詞」をタブで切り替えて、作業ごとに画面いっぱいで編集（開いたときはコード譜）
 - ヘッダーに**進捗率**（作詞・編曲・全体の横長ブロック）と**デモ音源**を並べて常に表示し、確認しながら作業できる
 - 歌詞を**セクション単位**（Aメロ / Bメロ / サビ など）で編集・ドラッグ＆ドロップで並び替え
+- 歌詞を **Word（.docx）/ テキスト（.txt）/ PDF** で書き出し（表示中の内容をそのまま。未保存の編集も含む）
 
 ### コード譜（Excel テンプレートをそのまま編集）
 
@@ -114,6 +115,8 @@ src/main/
 │   │   ├── ChordSheetPdfImporter.java # PDF 読み取り
 │   │   ├── ChordChartController.java  # 作成・インポート・エクスポート API
 │   │   └── LegacyChordMigration.java  # 旧コード進行データの移行
+│   ├── pdf/
+│   │   └── PdfFonts.java              # PDF 用の日本語フォント（コード譜・歌詞で共通）
 │   ├── config/
 │   │   ├── DataInitializer.java       # 初期データ投入
 │   │   ├── TagOwnershipMigration.java # 共通タグ → ユーザーごとのタグへの移行
@@ -124,6 +127,7 @@ src/main/
 │   │   ├── AuthController.java        # ログイン・新規登録
 │   │   ├── CalendarController.java    # 制作カレンダー
 │   │   ├── TagController.java         # タグの追加・削除
+│   │   ├── LyricsController.java      # 歌詞の書き出し API
 │   │   └── ProfileController.java     # プロフィール・パスワード変更
 │   ├── dto/                           # フォーム・リクエストオブジェクト
 │   ├── entity/
@@ -139,6 +143,7 @@ src/main/
 │   │   ├── SongService.java           # 曲ビジネスロジック
 │   │   ├── ScheduleService.java       # 納期チェック
 │   │   ├── TagService.java            # ユーザーごとのタグ
+│   │   ├── LyricsExportService.java   # 歌詞の Word / テキスト / PDF 出力
 │   │   └── UserService.java
 │   └── storage/
 │       ├── AudioStorage.java          # 音源の保存先（インターフェース）

@@ -1,6 +1,6 @@
 package com.portfolio.musictracker.chordchart;
 
-import org.apache.pdfbox.io.RandomAccessReadBuffer;
+import com.portfolio.musictracker.pdf.PdfFonts;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
@@ -10,20 +10,13 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
 import org.apache.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile;
-import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
-import org.apache.fontbox.ttf.TTFParser;
-import org.apache.fontbox.ttf.TrueTypeFont;
 
 import java.awt.Color;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,21 +36,7 @@ public final class ChordSheetPdfRenderer {
     private static final float NATURAL_SCALE = 0.75f;
     private static final float CELL_PADDING_PX = 3f;
 
-    private static final byte[] PRIMARY_FONT = loadResource("/fonts/MPLUSRounded1c-Regular.ttf");
-    private static final byte[] FALLBACK_FONT = loadResource("/fonts/ipaexg.ttf");
-
     private ChordSheetPdfRenderer() {
-    }
-
-    private static byte[] loadResource(String path) {
-        try (InputStream in = ChordSheetPdfRenderer.class.getResourceAsStream(path)) {
-            if (in == null) {
-                throw new IllegalStateException("フォントが見つかりません: " + path);
-            }
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     /**
@@ -70,7 +49,7 @@ public final class ChordSheetPdfRenderer {
     public static byte[] render(ChordSheet sheet, byte[] attachment, String title) {
         ChordSheet data = sheet.normalize();
         try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Fonts fonts = new Fonts(doc);
+            PdfFonts fonts = new PdfFonts(doc);
             new Layout(doc, data, fonts).draw();
             if (attachment != null) {
                 attach(doc, attachment);
@@ -104,98 +83,11 @@ public final class ChordSheetPdfRenderer {
         doc.getDocumentCatalog().setNames(names);
     }
 
-    /** 主フォント（M PLUS Rounded 1c）と、収録されていない文字用の予備フォント（IPAex ゴシック）。 */
-    private static final class Fonts {
-        private final PDDocument doc;
-        final PDType0Font primary;
-        /** 予備フォントは大きい（約6MB）ため、主フォントにない文字が出てきたときだけ読み込む。 */
-        private PDType0Font fallback;
-        private final TrueTypeFont primaryTtf;
-        private final Map<Integer, Boolean> primaryHas = new HashMap<>();
-
-        Fonts(PDDocument doc) throws IOException {
-            this.doc = doc;
-            primaryTtf = new TTFParser().parse(new RandomAccessReadBuffer(PRIMARY_FONT));
-            primary = PDType0Font.load(doc, primaryTtf, true);
-        }
-
-        private PDType0Font fallback() {
-            if (fallback == null) {
-                try {
-                    fallback = PDType0Font.load(doc, new ByteArrayInputStream(FALLBACK_FONT), true);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-            return fallback;
-        }
-
-        PDType0Font fontFor(int codePoint) {
-            boolean has = primaryHas.computeIfAbsent(codePoint, cp -> {
-                try {
-                    return primaryTtf.getUnicodeCmapLookup().getGlyphId(cp) > 0;
-                } catch (IOException e) {
-                    return false;
-                }
-            });
-            return has ? primary : fallback();
-        }
-
-        /** 同じフォントで描ける文字ごとに区切る。どちらのフォントにもない文字は「?」にする。 */
-        List<Run> runs(String text) {
-            List<Run> runs = new ArrayList<>();
-            StringBuilder sb = new StringBuilder();
-            PDType0Font current = null;
-            for (int i = 0; i < text.length(); ) {
-                int cp = text.codePointAt(i);
-                i += Character.charCount(cp);
-                if (Character.isISOControl(cp)) {
-                    continue;
-                }
-                PDType0Font f = fontFor(cp);
-                String ch = new String(Character.toChars(cp));
-                if (f != primary && !canEncode(f, ch)) {
-                    f = primary;
-                    ch = "?";
-                }
-                if (current != null && f != current) {
-                    runs.add(new Run(sb.toString(), current));
-                    sb.setLength(0);
-                }
-                current = f;
-                sb.append(ch);
-            }
-            if (current != null && !sb.isEmpty()) {
-                runs.add(new Run(sb.toString(), current));
-            }
-            return runs;
-        }
-
-        private static boolean canEncode(PDType0Font font, String ch) {
-            try {
-                font.encode(ch);
-                return true;
-            } catch (IOException | IllegalArgumentException e) {
-                return false;
-            }
-        }
-    }
-
-    private record Run(String text, PDType0Font font) {
-        float width(float size) {
-            try {
-                return font.getStringWidth(text) / 1000f * size;
-            } catch (IOException e) {
-                return 0;
-            }
-        }
-    }
-
     /** ページ割りと描画。 */
     private static final class Layout {
         private final PDDocument doc;
         private final ChordSheet data;
-        private final Fonts fonts;
+        private final PdfFonts fonts;
         private final float scale;
         private final float[] colX;
         /** 結合セルで隠れるセル（描画しない）。 */
@@ -203,7 +95,7 @@ public final class ChordSheetPdfRenderer {
         /** 各行から始まる結合が最後に覆う行（改ページで分断しないため）。 */
         private final int[] groupEnd;
 
-        Layout(PDDocument doc, ChordSheet data, Fonts fonts) {
+        Layout(PDDocument doc, ChordSheet data, PdfFonts fonts) {
             this.doc = doc;
             this.data = data;
             this.fonts = fonts;
@@ -335,9 +227,9 @@ public final class ChordSheetPdfRenderer {
                 default -> (y0 + y1) / 2f + blockHeight / 2f - size * 0.85f;
             };
             for (String line : lines) {
-                List<Run> runs = fonts.runs(line);
+                List<PdfFonts.Run> runs = fonts.runs(line);
                 float width = 0;
-                for (Run run : runs) {
+                for (PdfFonts.Run run : runs) {
                     width += run.width(size);
                 }
                 float x = switch (s.textAlign) {
@@ -346,7 +238,7 @@ public final class ChordSheetPdfRenderer {
                     default -> x0 + pad;
                 };
                 float startX = x;
-                for (Run run : runs) {
+                for (PdfFonts.Run run : runs) {
                     cs.beginText();
                     cs.setFont(run.font(), size);
                     cs.setNonStrokingColor(color);

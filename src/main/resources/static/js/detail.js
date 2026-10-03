@@ -477,3 +477,38 @@ function showToast(message) {
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => { toast.style.display = 'none'; }, 2200);
 }
+
+/* =========================================================
+   9) 歌詞の書き出し（Word / テキスト / PDF）
+   画面に表示中の歌詞（未保存の編集も含む）をサーバーでファイルにしてダウンロードする。
+   ========================================================= */
+const LYRICS_EXPORT_URL = SAVE_URL.replace(/\/save$/, '/lyrics/export');
+
+function exportLyrics(format) {
+    fetch(LYRICS_EXPORT_URL + '?format=' + format, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: collectSections('lyric') })
+    }).then((res) => {
+        if (!res.ok) {
+            return res.json().catch(() => ({})).then((b) => {
+                throw new Error(b.error || '書き出しに失敗しました。');
+            });
+        }
+        const m = (res.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/i);
+        const name = m ? decodeURIComponent(m[1]) : 'lyrics.' + format;
+        return res.blob().then((blob) => ({ blob: blob, name: name }));
+    }).then(({ blob, name }) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }).catch((e) => alert(e.message));
+}
+
+document.querySelectorAll('.lyrics-export-btn').forEach((btn) => {
+    btn.addEventListener('click', () => exportLyrics(btn.getAttribute('data-format')));
+});

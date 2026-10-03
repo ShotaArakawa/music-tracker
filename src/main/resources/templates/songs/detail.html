@@ -109,6 +109,16 @@
     <section class="panel" data-panel="lyric" role="tabpanel" hidden>
         <div class="area-header">
             <h2 class="h6 mb-0">📝 歌詞</h2>
+            <!-- 表示中の歌詞（未保存の編集も含む）をファイルに書き出す -->
+            <div class="chart-menu-wrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-menu="lyrics-export-menu"
+                        title="歌詞をファイルに書き出す">📤 エクスポート ▾</button>
+                <div class="chart-menu chart-menu-end" id="lyrics-export-menu">
+                    <button type="button" class="lyrics-export-btn" data-format="docx">Word（.docx）</button>
+                    <button type="button" class="lyrics-export-btn" data-format="txt">テキスト（.txt）</button>
+                    <button type="button" class="lyrics-export-btn" data-format="pdf">PDF</button>
+                </div>
+            </div>
         </div>
         <div class="section-list" data-area="lyric">
             <div class="section-card" th:each="sec : ${song.lyricSections}" th:attr="data-id=${sec.id}">
