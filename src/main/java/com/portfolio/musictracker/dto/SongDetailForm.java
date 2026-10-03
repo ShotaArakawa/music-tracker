@@ -10,12 +10,10 @@ import java.util.List;
  * <p>
  * 歌詞セクションは画面上の表示順で並んだ配列として送られ、配列の並び順がそのまま {@code sortOrder} になる。
  * コード譜は表のデータ全体（{@link ChordSheet}）を送る。null はコード譜なし（削除）を表す。
+ * BPM・Key・世界観はスタジオ画面から外したため受け取らない（保存済みの値はそのまま残る）。
  */
 public class SongDetailForm {
 
-    private Integer bpm;
-    private String musicKey;
-    private String worldViewMemo;
     private int lyricProgress;
     private int melodyProgress;
     private int arrangementProgress;
@@ -53,30 +51,6 @@ public class SongDetailForm {
         public void setContent(String content) {
             this.content = content;
         }
-    }
-
-    public Integer getBpm() {
-        return bpm;
-    }
-
-    public void setBpm(Integer bpm) {
-        this.bpm = bpm;
-    }
-
-    public String getMusicKey() {
-        return musicKey;
-    }
-
-    public void setMusicKey(String musicKey) {
-        this.musicKey = musicKey;
-    }
-
-    public String getWorldViewMemo() {
-        return worldViewMemo;
-    }
-
-    public void setWorldViewMemo(String worldViewMemo) {
-        this.worldViewMemo = worldViewMemo;
     }
 
     public int getLyricProgress() {

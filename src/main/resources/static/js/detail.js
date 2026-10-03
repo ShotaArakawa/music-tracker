@@ -1,6 +1,6 @@
 /* 作曲コア（スタジオ）画面 songs/detail.html のスクリプト */
 const SAVE_URL = document.body.getAttribute('data-save-url');
-const STORAGE_KEY = 'mt-split-sizes';
+const TAB_STORAGE_KEY = 'mt-studio-tab';
 
 /* =========================================================
    1) セクションのドラッグ&ドロップ並び替え
@@ -92,23 +92,21 @@ document.querySelectorAll('.add-section').forEach((btn) => {
 });
 
 /* =========================================================
-   3) 進捗（数値入力・スライダー・バーの連動）
+   3) 進捗（ヘッダーの横長ブロック。数値入力とスライダーの連動）
    ========================================================= */
 function clampPct(v) {
     if (isNaN(v)) return 0;
     return Math.max(0, Math.min(100, Math.round(v)));
 }
 
-function bindMetric(numId, barId) {
+function bindMetric(numId) {
     const num = document.getElementById(numId);
-    const bar = document.getElementById(barId);
     const range = document.querySelector('.pct-range[data-for="' + numId + '"]');
 
     function apply(value, source) {
         const v = clampPct(value);
         if (source !== 'num') num.value = v;
         if (source !== 'range') range.value = v;
-        bar.style.width = v + '%';
         updateOverall();
     }
     num.addEventListener('input', () => apply(parseInt(num.value, 10), 'num'));
@@ -125,73 +123,30 @@ function updateOverall() {
     document.getElementById('overallBar').style.width = overall + '%';
 }
 
-bindMetric('lyricProgress', 'lyricBar');
-bindMetric('melodyProgress', 'melodyBar');
-bindMetric('arrangementProgress', 'arrangementBar');
+bindMetric('lyricProgress');
+bindMetric('melodyProgress');
+bindMetric('arrangementProgress');
 
 /* =========================================================
-   4) 3エリアのリサイズ（スプリットビュー）
+   4) デモ音源（ヘッダー右上）：ファイルを選んだらすぐアップロード
    ========================================================= */
-const split = document.getElementById('split');
-const panels = [...split.querySelectorAll('.panel')];
-
-function saveSizes() {
-    const sizes = panels.map((p) => p.style.flexBasis || '');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sizes));
-}
-
-function restoreSizes() {
-    try {
-        const sizes = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-        if (Array.isArray(sizes) && sizes.length === panels.length) {
-            panels.forEach((p, i) => { if (sizes[i]) p.style.flexBasis = sizes[i]; });
-        }
-    } catch (e) { /* 無視 */ }
-}
-
-document.querySelectorAll('.gutter').forEach((gutter) => {
-    gutter.addEventListener('mousedown', (e) => {
-        // 横並び（デスクトップ）以外は無効
-        if (window.innerWidth <= 991.98) return;
-        e.preventDefault();
-        const left = gutter.previousElementSibling;
-        const right = gutter.nextElementSibling;
-        const startX = e.clientX;
-        const leftStart = left.getBoundingClientRect().width;
-        const rightStart = right.getBoundingClientRect().width;
-        const MIN = 160;
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-
-        function onMove(ev) {
-            let delta = ev.clientX - startX;
-            if (leftStart + delta < MIN) delta = MIN - leftStart;
-            if (rightStart - delta < MIN) delta = rightStart - MIN;
-            left.style.flexBasis = (leftStart + delta) + 'px';
-            right.style.flexBasis = (rightStart - delta) + 'px';
-        }
-        function onUp() {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            saveSizes();
-        }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    });
+const audioFile = document.getElementById('audio-file');
+document.getElementById('audio-pick').addEventListener('click', () => audioFile.click());
+audioFile.addEventListener('change', () => {
+    if (!audioFile.files.length) return;
+    // アップロードは画面を再読み込みするため、未保存の変更があれば先に確認する
+    if (!confirm('「' + audioFile.files[0].name + '」をアップロードします。\n'
+        + '保存していない変更は失われます。先に「変更を保存」してください。よろしいですか？')) {
+        audioFile.value = '';
+        return;
+    }
+    ChordEditor.markSaved();
+    document.getElementById('audio-form').submit();
 });
-
-restoreSizes();
 
 /* =========================================================
    5) 一括保存（変更を保存）
    ========================================================= */
-function numOrNull(id) {
-    const v = document.getElementById(id).value.trim();
-    return v === '' ? null : parseInt(v, 10);
-}
-
 function collectSections(area) {
     const list = getSectionList(area);
     return [...list.querySelectorAll('.section-card')].map((card) => ({
@@ -203,9 +158,6 @@ function collectSections(area) {
 
 function gather() {
     return {
-        bpm: numOrNull('bpm'),
-        musicKey: document.getElementById('musicKey').value,
-        worldViewMemo: document.getElementById('worldViewMemo').value,
         lyricProgress: clampPct(parseInt(document.getElementById('lyricProgress').value, 10)),
         melodyProgress: clampPct(parseInt(document.getElementById('melodyProgress').value, 10)),
         arrangementProgress: clampPct(parseInt(document.getElementById('arrangementProgress').value, 10)),
@@ -228,7 +180,7 @@ saveBtn.addEventListener('click', () => {
         if (!res.ok) throw new Error(data.error || '保存に失敗しました。通信状況を確認してください。');
         return data;
     })).then(() => {
-        // 新しく採番されたID等を反映するためリロード（リサイズ幅は localStorage で維持）
+        // 新しく採番されたID等を反映するためリロード（開いていたタブは localStorage で維持）
         ChordEditor.markSaved();
         sessionStorage.setItem('mt-saved', '1');
         location.reload();
@@ -265,7 +217,10 @@ const ChordEditor = (() => {
     const container = document.getElementById('chord-sheet');
     const emptyEl = document.getElementById('chart-empty');
     const loadingEl = document.getElementById('chart-loading');
+    const panel = container.closest('.panel');
     let worksheet = null;
+    // タブが非表示の間に読み込んだ表（表示されたときに描画する）。描画前でも保存・出力に使う
+    let pending = null;
     // 未保存の変更があるか（ページを離れるときの確認に使う）
     let dirty = false;
     // 読み込み直後の行の高さ調整などを「変更」と数えないためのフラグ
@@ -276,7 +231,7 @@ const ChordEditor = (() => {
     }
 
     function showState() {
-        const has = !!worksheet;
+        const has = !!worksheet || !!pending;
         emptyEl.hidden = has;
         container.hidden = !has;
         document.querySelectorAll('.chart-needs-sheet').forEach((b) => { b.disabled = !has; });
@@ -291,8 +246,17 @@ const ChordEditor = (() => {
     }
 
     // サーバーの表データ（ChordSheet）をエディタに読み込む。sheet が null なら空の状態にする。
+    // コード譜タブが非表示のときは描画を後回しにする（非表示のまま描画すると幅の計算が崩れるため）。
     function load(sheet, changed) {
         destroy();
+        pending = null;
+        if (sheet && panel.hidden) {
+            pending = sheet;
+            dirty = !!changed;
+            loadingEl.hidden = true;
+            showState();
+            return;
+        }
         loading = true;
         if (sheet) {
             const spreadsheet = jspreadsheet(container, {
@@ -335,7 +299,7 @@ const ChordEditor = (() => {
 
     // エディタの内容をサーバーに送る形（ChordSheet）にする。コード譜がなければ null。
     function getSheet() {
-        if (!worksheet) return null;
+        if (!worksheet) return pending;
         const data = worksheet.getData();
         const heights = data.map((_, i) => parseInt(worksheet.getHeight(i), 10) || 0);
         return {
@@ -356,7 +320,7 @@ const ChordEditor = (() => {
     }
 
     function confirmReplace() {
-        return !worksheet || confirm('表示中のコード譜を置き換えます。よろしいですか？\n'
+        return (!worksheet && !pending) || confirm('表示中のコード譜を置き換えます。よろしいですか？\n'
             + '※「変更を保存」を押すまで保存されません。');
     }
 
@@ -466,8 +430,16 @@ const ChordEditor = (() => {
             loadingEl.textContent = 'コード譜の読み込みに失敗しました: ' + e.message;
         });
 
+    // コード譜タブが表示されたら、後回しにしていた表を描画する（未保存の変更状態は引き継ぐ）
+    function onShow() {
+        if (pending && !panel.hidden) {
+            load(pending, dirty);
+        }
+    }
+
     return {
         getSheet: getSheet,
+        onShow: onShow,
         markSaved: () => { dirty = false; }
     };
 })();
@@ -478,44 +450,41 @@ function escapeHtml(s) {
 }
 
 /* =========================================================
-   7) Zen Mode（全画面）
+   7) 歌詞 / コード譜の切り替えタブ（最後に開いたタブを覚えておく）
    ========================================================= */
-const musicKeyInput = document.getElementById('musicKey');
-const bpmInput = document.getElementById('bpm');
+const studioTabs = [...document.querySelectorAll('.studio-tab')];
 
-// 全画面時に右下へ出す BPM / Key を更新
-function updateZenInfo() {
-    document.getElementById('zen-key').textContent = musicKeyInput.value.trim() || '—';
-    document.getElementById('zen-bpm').textContent = bpmInput.value.trim() || '—';
-}
-musicKeyInput.addEventListener('input', updateZenInfo);
-bpmInput.addEventListener('input', updateZenInfo);
-updateZenInfo();
-
-function enterZen(area) {
-    const panel = document.querySelector('.panel[data-panel="' + area + '"]');
-    if (!panel) return;
-    document.body.classList.add('zen', 'zen-' + area);
-    panel.classList.add('zen-active');
-    updateZenInfo();
-}
-
-function exitZen() {
-    document.querySelectorAll('.panel.zen-active').forEach((p) => p.classList.remove('zen-active'));
-    document.body.classList.remove('zen', 'zen-lyric', 'zen-chord');
-}
-
-document.querySelectorAll('.zen-btn').forEach((btn) => {
-    btn.addEventListener('click', () => enterZen(btn.getAttribute('data-area')));
-});
-document.getElementById('zen-close').addEventListener('click', exitZen);
-
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.body.classList.contains('zen')) {
-        // テキスト編集中でも全画面解除を優先
-        exitZen();
+function activateTab(area) {
+    studioTabs.forEach((btn) => {
+        const active = btn.dataset.tab === area;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('#studio .panel').forEach((panel) => {
+        panel.hidden = panel.dataset.panel !== area;
+    });
+    if (area === 'chord') {
+        // 非表示の間は表を描画しないため、開いたときに描画する
+        ChordEditor.onShow();
     }
-});
+    try {
+        localStorage.setItem(TAB_STORAGE_KEY, area);
+    } catch (e) { /* 保存できなくても動作には影響しない */ }
+}
+
+studioTabs.forEach((btn) => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+
+(function restoreTab() {
+    let saved = null;
+    try {
+        saved = localStorage.getItem(TAB_STORAGE_KEY);
+    } catch (e) { /* 読めなければ既定の歌詞タブ */ }
+    activateTab(saved === 'chord' ? 'chord' : 'lyric');
+})();
+
+// モバイル固定保存ボタンはデスクトップ側の save-all に委譲
+document.getElementById('save-all-mobile')
+    .addEventListener('click', () => document.getElementById('save-all').click());
 
 /* =========================================================
    8) セクション構成テンプレート（保存・適用・名前変更・上書き・削除）
@@ -713,80 +682,3 @@ function showToast(message) {
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => { toast.style.display = 'none'; }, 2200);
 }
-
-/* =========================================================
-   9) セクションの最小化（アコーディオン）
-   各ブロックのヘッダー右端の ▼/▲ で本文を折りたたむ。
-   ========================================================= */
-function addMinToggle(headerEl, bodyEls) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'min-btn';
-    btn.textContent = '▼';
-    btn.title = '最小化 / 展開';
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const collapsed = headerEl.classList.toggle('section-collapsed');
-        bodyEls.forEach((el) => { el.style.display = collapsed ? 'none' : ''; });
-        btn.textContent = collapsed ? '▲' : '▼';
-    });
-    headerEl.appendChild(btn);
-}
-
-// 情報パネルの各カード（デモ音源 / BPM / Key / 世界観 / 進捗率）
-document.querySelectorAll('.panel[data-panel="info"] .card').forEach((card) => {
-    const header = card.querySelector('.card-header');
-    const body = card.querySelector('.card-body');
-    if (!header || !body) return;
-    header.classList.add('collapsible-header');
-    addMinToggle(header, [body]);
-});
-
-// 歌詞 / コードのエリア（ヘッダー以降のコンテンツをまとめて折りたたむ）
-document.querySelectorAll('.panel[data-panel="lyric"], .panel[data-panel="chord"]').forEach((panel) => {
-    const header = panel.querySelector('.area-header');
-    if (!header) return;
-    const bodyEls = [...panel.children].filter((el) => el !== header);
-    addMinToggle(header, bodyEls);
-});
-
-/* =========================================================
-   10) モバイルタブ切り替え
-   ========================================================= */
-(function () {
-    const tabNav = document.getElementById('mobile-tab-nav');
-    if (!tabNav) return;
-
-    function activateTab(area) {
-        tabNav.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
-        const btn = tabNav.querySelector('[data-tab="' + area + '"]');
-        if (btn) btn.classList.add('active');
-        document.querySelectorAll('#split .panel').forEach((p) => p.classList.remove('tab-active'));
-        const panel = document.querySelector('.panel[data-panel="' + area + '"]');
-        if (panel) panel.classList.add('tab-active');
-    }
-
-    tabNav.querySelectorAll('[data-tab]').forEach((btn) => {
-        btn.addEventListener('click', () => activateTab(btn.dataset.tab));
-    });
-
-    function initTabs() {
-        if (window.innerWidth < 768) activateTab('lyric');
-    }
-    initTabs();
-
-    window.addEventListener('resize', () => {
-        if (window.innerWidth >= 768) {
-            document.querySelectorAll('#split .panel').forEach((p) => p.classList.remove('tab-active'));
-        } else {
-            const active = tabNav.querySelector('.nav-link.active');
-            if (active) activateTab(active.dataset.tab);
-        }
-    });
-
-    // モバイル固定保存ボタンはデスクトップ側の save-all に委譲
-    const mobileBtn = document.getElementById('save-all-mobile');
-    if (mobileBtn) {
-        mobileBtn.addEventListener('click', () => document.getElementById('save-all').click());
-    }
-})();

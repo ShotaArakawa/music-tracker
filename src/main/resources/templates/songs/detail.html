@@ -11,58 +11,116 @@
 </head>
 <body th:attr="data-save-url=@{/songs/{id}/save(id=${song.id})},data-chord-url=@{/songs/{id}/chord-chart(id=${song.id})}">
 
-<!-- ===== スクロール追従ヘッダー（右上に一括保存ボタン） ===== -->
-<div class="core-header">
-    <div class="d-flex justify-content-between align-items-center px-3 py-2 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <a th:href="@{/songs}" class="btn btn-sm btn-outline-secondary">← 一覧</a>
-            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex">📅 カレンダー</a>
-            <h1 class="h5 mb-0">
+<!-- ===== スクロール追従ヘッダー =====
+     1段目: 戻る・曲名・保存 / 2段目: 進捗率（左）とデモ音源（右） / 3段目: 作業の切り替えタブ -->
+<header class="core-header">
+    <div class="top-bar">
+        <div class="d-flex align-items-center gap-2 min-w-0">
+            <a th:href="@{/songs}" class="btn btn-sm btn-outline-secondary flex-shrink-0">← 一覧</a>
+            <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+               title="カレンダー">📅<span class="d-none d-lg-inline"> カレンダー</span></a>
+            <h1 class="h5 mb-0 song-title">
                 🎼 <span class="title-text" th:text="${song.title}">曲名</span>
                 <span class="badge align-middle"
                       th:classappend="${song.status.colorClass}"
                       th:text="${song.status.label}">ステータス</span>
             </h1>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
             <span id="save-status" class="text-muted small"></span>
             <button type="button" id="save-all" class="btn btn-primary">💾 変更を保存</button>
-            <span class="vr mx-1 d-none d-md-inline"></span>
-            <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex"
-               title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
-            <form th:action="@{/logout}" method="post" class="m-0 d-none d-md-block">
+            <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary"
+               title="プロフィール設定">👤<span class="d-none d-lg-inline" th:text="' ' + ${currentUsername}"> user</span></a>
+            <form th:action="@{/logout}" method="post" class="m-0">
                 <button type="submit" class="btn btn-sm btn-outline-secondary">ログアウト</button>
             </form>
         </div>
     </div>
-    <!-- モバイル: タブナビゲーション -->
-    <div class="d-md-none border-top">
-        <div class="nav nav-tabs nav-fill" id="mobile-tab-nav" style="border-bottom: none;">
-            <button type="button" class="nav-link active py-2" data-tab="lyric" style="border-radius: 0;">📝 歌詞</button>
-            <button type="button" class="nav-link py-2" data-tab="chord" style="border-radius: 0;">🎼 コード譜</button>
-            <button type="button" class="nav-link py-2" data-tab="info" style="border-radius: 0;">🎧 情報</button>
-        </div>
+
+    <div class="studio-bar">
+        <!-- 左: 進捗率（横長ブロック） -->
+        <section class="progress-block" aria-label="進捗率">
+            <div class="metric" data-metric="lyric">
+                <div class="metric-head">
+                    <span>作詞</span>
+                    <span><input type="number" class="pct-input" id="lyricProgress" min="0" max="100"
+                                 th:value="${song.lyricProgress}" title="数値を直接入力できます">%</span>
+                </div>
+                <input type="range" class="pct-range" data-for="lyricProgress" min="0" max="100" step="5"
+                       th:value="${song.lyricProgress}" aria-label="作詞の進捗率">
+            </div>
+            <div class="metric" data-metric="melody">
+                <div class="metric-head">
+                    <span>メロディ</span>
+                    <span><input type="number" class="pct-input" id="melodyProgress" min="0" max="100"
+                                 th:value="${song.melodyProgress}" title="数値を直接入力できます">%</span>
+                </div>
+                <input type="range" class="pct-range" data-for="melodyProgress" min="0" max="100" step="5"
+                       th:value="${song.melodyProgress}" aria-label="メロディの進捗率">
+            </div>
+            <div class="metric" data-metric="arrangement">
+                <div class="metric-head">
+                    <span>編曲</span>
+                    <span><input type="number" class="pct-input" id="arrangementProgress" min="0" max="100"
+                                 th:value="${song.arrangementProgress}" title="数値を直接入力できます">%</span>
+                </div>
+                <input type="range" class="pct-range" data-for="arrangementProgress" min="0" max="100" step="5"
+                       th:value="${song.arrangementProgress}" aria-label="編曲の進捗率">
+            </div>
+            <div class="metric metric-overall">
+                <div class="metric-head">
+                    <span>全体</span>
+                    <span><span id="overallVal" th:text="${song.overallProgress}">0</span>%</span>
+                </div>
+                <div class="progress overall-progress">
+                    <div class="progress-bar" id="overallBar"
+                         th:style="'width:' + ${song.overallProgress} + '%'"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右: デモ音源 -->
+        <section class="audio-block" aria-label="デモ音源">
+            <span class="block-label">🎧 デモ音源</span>
+            <audio th:if="${song.audioFilePath != null}" controls preload="metadata"
+                   th:src="@{/songs/{id}/audio(id=${song.id}, v=${song.audioFilePath})}">
+                お使いのブラウザは audio タグに対応していません。
+            </audio>
+            <span th:if="${song.audioFilePath == null}" class="audio-empty">未アップロード</span>
+            <!-- ファイルを選ぶとすぐアップロードする（MP3 / WAV など最大 50MB） -->
+            <form th:action="@{/songs/{id}/audio(id=${song.id})}" method="post" enctype="multipart/form-data"
+                  class="m-0" id="audio-form">
+                <input type="file" name="audioFile" id="audio-file" hidden
+                       accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac">
+                <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="audio-pick"
+                        title="MP3 / WAV / M4A / OGG / AAC / FLAC（最大 50MB）"
+                        th:text="${song.audioFilePath == null} ? '⬆ アップロード' : '⬆ 差し替え'">⬆ アップロード</button>
+            </form>
+        </section>
     </div>
-</div>
+
+    <!-- 作業の切り替え -->
+    <nav class="studio-tabs" role="tablist" aria-label="作業の切り替え">
+        <button type="button" class="studio-tab active" role="tab" data-tab="lyric" aria-selected="true">📝 歌詞</button>
+        <button type="button" class="studio-tab" role="tab" data-tab="chord" aria-selected="false">🎼 コード譜</button>
+    </nav>
+</header>
 
 <!-- アップロード等のメッセージ -->
 <div th:if="${message}" class="alert alert-success py-2 mb-0 mx-3 mt-2" role="alert" th:text="${message}"></div>
 <div th:if="${error}" class="alert alert-danger py-2 mb-0 mx-3 mt-2" role="alert" th:text="${error}"></div>
 
-<!-- ===== 3エリア（リサイズ可能なスプリットビュー） ===== -->
-<div id="split">
+<main id="studio">
 
-    <!-- 左：歌詞 -->
-    <section class="panel" data-panel="lyric">
-        <div class="area-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+    <!-- 歌詞 -->
+    <section class="panel" data-panel="lyric" role="tabpanel">
+        <div class="area-header">
             <h2 class="h6 mb-0">📝 歌詞</h2>
-            <div class="d-flex align-items-center gap-1">
+            <div class="d-flex align-items-center gap-1 flex-wrap">
                 <button type="button" class="btn btn-sm btn-outline-secondary tpl-save-btn" data-area="lyric"
                         title="現在の構成をテンプレートとして保存">💾 構成を保存</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary tpl-apply-btn" data-area="lyric"
                         title="保存済みテンプレートを適用">📋 テンプレ適用</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="lyric"
-                        title="このエリアを全画面表示">🔍 全画面（Zen Mode）</button>
             </div>
         </div>
         <div class="section-list" data-area="lyric">
@@ -72,7 +130,7 @@
                     <input class="section-name" type="text" th:value="${sec.name}" placeholder="セクション名">
                     <button type="button" class="btn-del" title="削除">×</button>
                 </div>
-                <textarea class="section-body form-control" rows="4"
+                <textarea class="section-body form-control" rows="5"
                           placeholder="歌詞を入力..." th:text="${sec.content}"></textarea>
             </div>
         </div>
@@ -81,11 +139,9 @@
         </button>
     </section>
 
-    <div class="gutter" data-gutter="0"></div>
-
-    <!-- 中央：コード譜（Excel テンプレートを表計算エディタで直接編集） -->
-    <section class="panel" data-panel="chord">
-        <div class="area-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+    <!-- コード譜（Excel テンプレートを表計算エディタで直接編集） -->
+    <section class="panel" data-panel="chord" role="tabpanel" hidden>
+        <div class="area-header">
             <h2 class="h6 mb-0">🎼 コード譜</h2>
             <div class="d-flex align-items-center gap-1 flex-wrap">
                 <div class="chart-menu-wrap">
@@ -103,15 +159,13 @@
                 <div class="chart-menu-wrap">
                     <button type="button" class="btn btn-sm btn-outline-secondary chart-needs-sheet"
                             data-menu="chart-export-menu" title="ファイルに書き出す">📤 エクスポート ▾</button>
-                    <div class="chart-menu" id="chart-export-menu">
+                    <div class="chart-menu chart-menu-end" id="chart-export-menu">
                         <button type="button" class="chart-export-btn" data-format="xlsx">Excel（.xlsx）</button>
                         <button type="button" class="chart-export-btn" data-format="pdf">PDF</button>
                     </div>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-danger chart-needs-sheet" id="chart-clear-btn"
                         title="このコード譜を削除（保存時に反映）">🗑</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary zen-btn" data-area="chord"
-                        title="このエリアを全画面表示">🔍 全画面（Zen Mode）</button>
             </div>
         </div>
 
@@ -132,164 +186,7 @@
         <!-- 表計算エディタ（Jspreadsheet） -->
         <div id="chord-sheet" class="chord-sheet"></div>
     </section>
-
-    <div class="gutter" data-gutter="1"></div>
-
-    <!-- 右：曲情報・世界観・進捗 -->
-    <aside class="panel" data-panel="info">
-
-        <!-- スマホ用: カレンダー/プロフィール/ログアウトへのリンク -->
-        <div class="d-md-none mb-3">
-            <div class="d-flex gap-2">
-                <a th:href="@{/calendar}" class="btn btn-sm btn-outline-secondary flex-fill">📅 カレンダー</a>
-                <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary flex-fill">👤 <span th:text="${currentUsername}">user</span></a>
-                <form th:action="@{/logout}" method="post" class="flex-fill m-0">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100">ログアウト</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- デモ音源 -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold py-2">🎧 デモ音源</div>
-            <div class="card-body">
-                <!-- 既存音源のプレイヤー -->
-                <div th:if="${song.audioFilePath != null}" class="mb-2">
-                    <audio controls class="w-100"
-                           th:src="@{/songs/{id}/audio(id=${song.id}, v=${song.audioFilePath})}">
-                        お使いのブラウザは audio タグに対応していません。
-                    </audio>
-                </div>
-                <p th:if="${song.audioFilePath == null}" class="text-muted small mb-2">
-                    まだデモ音源がありません。MP3 / WAV などをアップロードしてください。
-                </p>
-
-                <!-- アップロードフォーム -->
-                <form th:action="@{/songs/{id}/audio(id=${song.id})}" method="post"
-                      enctype="multipart/form-data" class="input-group input-group-sm">
-                    <input type="file" name="audioFile" class="form-control"
-                           accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" required>
-                    <button type="submit" class="btn btn-outline-primary">
-                        <span th:text="${song.audioFilePath == null} ? '⬆ アップロード' : '⬆ 差し替え'">⬆ アップロード</span>
-                    </button>
-                </form>
-                <div class="form-text">最大 50MB</div>
-            </div>
-        </div>
-
-        <!-- BPM -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold py-2">🥁 BPM</div>
-            <div class="card-body">
-                <div class="input-group input-group-sm">
-                    <input type="number" id="bpm" class="form-control"
-                           min="0" max="400" th:value="${song.bpm}" placeholder="120">
-                    <span class="input-group-text">BPM</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Key -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold py-2">🎼 Key</div>
-            <div class="card-body">
-                <input type="text" id="musicKey" class="form-control form-control-sm" maxlength="20"
-                       th:value="${song.musicKey}" placeholder="例: C / Am / F#m">
-                <div class="form-text">コード譜をテンプレートから作るとき、見出しの Key 欄に入ります。</div>
-            </div>
-        </div>
-
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold py-2">🌌 世界観・コンセプト</div>
-            <div class="card-body">
-                <textarea id="worldViewMemo" class="form-control" rows="5"
-                          placeholder="曲の世界観・テーマ・参考曲など..."
-                          th:text="${song.worldViewMemo}"></textarea>
-            </div>
-        </div>
-
-        <div class="card shadow-sm">
-            <div class="card-header bg-white fw-bold py-2">📈 進捗率</div>
-            <div class="card-body">
-
-                <!-- 作詞 -->
-                <div class="metric mb-3" data-metric="lyric">
-                    <div class="d-flex justify-content-between small mb-1">
-                        <span>作詞</span>
-                        <span>
-                            <input type="number" class="pct-input" id="lyricProgress"
-                                   min="0" max="100" th:value="${song.lyricProgress}"
-                                   title="クリックして数値を直接入力できます">%
-                        </span>
-                    </div>
-                    <div class="progress mb-1" style="height: 8px;">
-                        <div class="progress-bar bg-info" id="lyricBar"
-                             th:style="'width:' + ${song.lyricProgress} + '%'"></div>
-                    </div>
-                    <input type="range" class="form-range pct-range" data-for="lyricProgress"
-                           min="0" max="100" step="5" th:value="${song.lyricProgress}">
-                </div>
-
-                <!-- メロディ -->
-                <div class="metric mb-3" data-metric="melody">
-                    <div class="d-flex justify-content-between small mb-1">
-                        <span>メロディ</span>
-                        <span>
-                            <input type="number" class="pct-input" id="melodyProgress"
-                                   min="0" max="100" th:value="${song.melodyProgress}"
-                                   title="クリックして数値を直接入力できます">%
-                        </span>
-                    </div>
-                    <div class="progress mb-1" style="height: 8px;">
-                        <div class="progress-bar bg-primary" id="melodyBar"
-                             th:style="'width:' + ${song.melodyProgress} + '%'"></div>
-                    </div>
-                    <input type="range" class="form-range pct-range" data-for="melodyProgress"
-                           min="0" max="100" step="5" th:value="${song.melodyProgress}">
-                </div>
-
-                <!-- 編曲 -->
-                <div class="metric mb-3" data-metric="arrangement">
-                    <div class="d-flex justify-content-between small mb-1">
-                        <span>編曲</span>
-                        <span>
-                            <input type="number" class="pct-input" id="arrangementProgress"
-                                   min="0" max="100" th:value="${song.arrangementProgress}"
-                                   title="クリックして数値を直接入力できます">%
-                        </span>
-                    </div>
-                    <div class="progress mb-1" style="height: 8px;">
-                        <div class="progress-bar bg-success" id="arrangementBar"
-                             th:style="'width:' + ${song.arrangementProgress} + '%'"></div>
-                    </div>
-                    <input type="range" class="form-range pct-range" data-for="arrangementProgress"
-                           min="0" max="100" step="5" th:value="${song.arrangementProgress}">
-                </div>
-
-                <hr>
-
-                <!-- 全体 -->
-                <div class="d-flex justify-content-between small fw-bold mb-1">
-                    <span>全体</span>
-                    <span><span id="overallVal" th:text="${song.overallProgress}">0</span>%</span>
-                </div>
-                <div class="progress" style="height: 12px;">
-                    <div class="progress-bar bg-warning text-dark" id="overallBar"
-                         th:style="'width:' + ${song.overallProgress} + '%'"></div>
-                </div>
-            </div>
-        </div>
-    </aside>
-</div>
-
-<!-- Zen Mode：フローティング基本情報（常に BPM/Key を確認できる） -->
-<div id="zen-float">
-    <span><span class="zf-label">BPM</span><span class="zf-val" id="zen-bpm">—</span></span>
-    <span><span class="zf-label">KEY</span><span class="zf-val" id="zen-key">—</span></span>
-</div>
-
-<!-- Zen Mode：閉じるボタン（一回り大きく・右上固定） -->
-<button type="button" id="zen-close" class="btn btn-dark shadow">✕ 全画面を閉じる（Esc）</button>
+</main>
 
 <!-- 新規セクション用テンプレート -->
 <template id="section-template">
@@ -299,7 +196,7 @@
             <input class="section-name" type="text" placeholder="セクション名">
             <button type="button" class="btn-del" title="削除">×</button>
         </div>
-        <textarea class="section-body form-control" rows="4" placeholder="入力..."></textarea>
+        <textarea class="section-body form-control" rows="5" placeholder="入力..."></textarea>
     </div>
 </template>
 

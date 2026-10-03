@@ -273,16 +273,13 @@ public class SongService {
 
     /**
      * 作曲コア画面の「変更を保存」を一括で反映する。
-     * 基本情報・世界観・進捗、歌詞セクションの追加・削除・並び替え・名前変更・本文編集、
-     * コード譜（表）をまとめて保存する。
+     * 進捗、歌詞セクションの追加・削除・並び替え・名前変更・本文編集、コード譜（表）をまとめて保存する。
+     * BPM・Key・世界観は画面から外したため変更しない（保存済みの値を残す）。
      */
     @Transactional
     public void saveDetail(Long id, SongDetailForm form, User user) {
         Song song = findOwned(id, user);
 
-        song.setBpm(form.getBpm());
-        song.setMusicKey(trimToNull(form.getMusicKey()));
-        song.setWorldViewMemo(form.getWorldViewMemo());
         song.setLyricProgress(clampPercent(form.getLyricProgress()));
         song.setMelodyProgress(clampPercent(form.getMelodyProgress()));
         song.setArrangementProgress(clampPercent(form.getArrangementProgress()));
@@ -337,14 +334,6 @@ public class SongService {
 
     private String normalizeName(String name) {
         return (name == null || name.isBlank()) ? "無題" : name.trim();
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private int clampPercent(int value) {

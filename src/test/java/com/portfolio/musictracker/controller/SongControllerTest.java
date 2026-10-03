@@ -119,6 +119,10 @@ class SongControllerTest extends IntegrationTestSupport {
     @Test
     void スタジオの一括保存でセクションの追加削除並び替えができる() throws Exception {
         Song song = createSong(alice, "曲");
+        song.setBpm(90);
+        song.setMusicKey("C");
+        song.setWorldViewMemo("夜の街");
+        songRepository.save(song);
         // 初回表示で既定セクション（歌詞: Aメロ/Bメロ/サビ）が作られる
         mockMvc.perform(get("/songs/" + song.getId()).with(as(alice))).andExpect(status().isOk());
         Long sabiId = inTx(() -> songRepository.findById(song.getId()).orElseThrow()
@@ -137,8 +141,10 @@ class SongControllerTest extends IntegrationTestSupport {
 
         inTx(() -> {
             Song saved = songRepository.findById(song.getId()).orElseThrow();
-            assertThat(saved.getBpm()).isEqualTo(120);
-            assertThat(saved.getMusicKey()).isEqualTo("Am");
+            // BPM・Key・世界観は画面から外したため、送られてきても変更しない
+            assertThat(saved.getBpm()).isEqualTo(90);
+            assertThat(saved.getMusicKey()).isEqualTo("C");
+            assertThat(saved.getWorldViewMemo()).isEqualTo("夜の街");
             assertThat(saved.getLyricProgress()).isEqualTo(100);
             assertThat(saved.getLyricSections()).extracting(s -> s.getName()).containsExactly("サビ", "Cメロ");
             assertThat(saved.getLyricSections().get(0).getId()).isEqualTo(sabiId);
