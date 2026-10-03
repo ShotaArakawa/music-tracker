@@ -77,7 +77,7 @@ public final class ChordSheetPdfRenderer {
             }
             PDDocumentInformation info = doc.getDocumentInformation();
             info.setTitle(title);
-            info.setCreator("Music Tracker");
+            info.setCreator("Music-Tracker");
             info.setCreationDate(Calendar.getInstance());
             doc.save(out);
             return out.toByteArray();

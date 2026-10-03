@@ -1,6 +1,5 @@
 /* 作曲コア（スタジオ）画面 songs/detail.html のスクリプト */
 const SAVE_URL = document.body.getAttribute('data-save-url');
-const TAB_STORAGE_KEY = 'mt-studio-tab';
 
 /* =========================================================
    1) セクションのドラッグ&ドロップ並び替え
@@ -177,7 +176,7 @@ saveBtn.addEventListener('click', () => {
         if (!res.ok) throw new Error(data.error || '保存に失敗しました。通信状況を確認してください。');
         return data;
     })).then(() => {
-        // 新しく採番されたID等を反映するためリロード（開いていたタブは localStorage で維持）
+        // 新しく採番されたID等を反映するためリロード
         ChordEditor.markSaved();
         sessionStorage.setItem('mt-saved', '1');
         location.reload();
@@ -441,13 +440,8 @@ const ChordEditor = (() => {
     };
 })();
 
-function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 /* =========================================================
-   7) 歌詞 / コード譜の切り替えタブ（最後に開いたタブを覚えておく）
+   7) コード譜 / 歌詞の切り替えタブ（画面を開いたときはコード譜）
    ========================================================= */
 const studioTabs = [...document.querySelectorAll('.studio-tab')];
 
@@ -464,214 +458,18 @@ function activateTab(area) {
         // 非表示の間は表を描画しないため、開いたときに描画する
         ChordEditor.onShow();
     }
-    try {
-        localStorage.setItem(TAB_STORAGE_KEY, area);
-    } catch (e) { /* 保存できなくても動作には影響しない */ }
 }
 
 studioTabs.forEach((btn) => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
-
-(function restoreTab() {
-    let saved = null;
-    try {
-        saved = localStorage.getItem(TAB_STORAGE_KEY);
-    } catch (e) { /* 読めなければ既定の歌詞タブ */ }
-    activateTab(saved === 'chord' ? 'chord' : 'lyric');
-})();
+activateTab('chord');
 
 // モバイル固定保存ボタンはデスクトップ側の save-all に委譲
 document.getElementById('save-all-mobile')
     .addEventListener('click', () => document.getElementById('save-all').click());
 
 /* =========================================================
-   8) セクション構成テンプレート（保存・適用・名前変更・上書き・削除）
+   8) 汎用トースト（保存トーストを使い回す）
    ========================================================= */
-const AREA_LABEL = { lyric: '歌詞' };
-
-// テンプレ一覧ポップオーバー（1つを使い回す）
-const tplMenu = document.createElement('div');
-tplMenu.className = 'template-menu';
-document.body.appendChild(tplMenu);
-
-// 現在開いているメニューの対象（再描画に使う）
-let tplMenuArea = null;
-let tplMenuAnchor = null;
-
-function hideTplMenu() {
-    tplMenu.classList.remove('show');
-    tplMenuArea = null;
-    tplMenuAnchor = null;
-}
-
-// メニュー外クリックで閉じる（適用ボタン自身のクリックは除く）
-document.addEventListener('click', (e) => {
-    if (!tplMenu.classList.contains('show')) return;
-    if (tplMenu.contains(e.target)) return;
-    if (e.target.closest && e.target.closest('.tpl-apply-btn')) return;
-    hideTplMenu();
-});
-
-// 「構成を保存」：現在のそのエリアのブロック構成を新規テンプレートとして保存
-document.querySelectorAll('.tpl-save-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-        const area = btn.getAttribute('data-area');
-        const sections = collectSections(area);
-        if (!sections.length) {
-            alert('保存できるブロックがありません。');
-            return;
-        }
-        const name = prompt(AREA_LABEL[area] + '構成のテンプレート名を入力してください\n（例: 王道ポップス構成）');
-        if (name === null) return;
-        if (!name.trim()) {
-            alert('テンプレート名を入力してください。');
-            return;
-        }
-        postJson('/templates', {
-            name: name.trim(),
-            type: area.toUpperCase(),
-            sections: sections
-        }).then((data) => {
-            if (data && data.error) { alert(data.error); return; }
-            showToast('テンプレート「' + (data.name || name.trim()) + '」を保存しました');
-        }).catch(() => alert('テンプレートの保存に失敗しました。'));
-    });
-});
-
-// 「テンプレ適用」：保存済みテンプレ一覧をポップオーバーで表示
-document.querySelectorAll('.tpl-apply-btn').forEach((btn) => {
-    btn.addEventListener('click', () => openTplMenu(btn, btn.getAttribute('data-area')));
-});
-
-// 一覧を取得してメニューを描画（rename/overwrite/delete 後の再描画にも使う）
-function openTplMenu(anchorBtn, area) {
-    tplMenuArea = area;
-    tplMenuAnchor = anchorBtn;
-    fetch('/templates?type=' + area.toUpperCase())
-        .then((res) => {
-            if (!res.ok) throw new Error('list failed');
-            return res.json();
-        })
-        .then((list) => renderTplMenu(list))
-        .catch(() => alert('テンプレートの取得に失敗しました。'));
-}
-
-function renderTplMenu(list) {
-    const area = tplMenuArea;
-    let html = '<div class="tm-title">' + AREA_LABEL[area] + '構成テンプレート</div>';
-    if (!list.length) {
-        html += '<div class="tm-empty">保存済みテンプレートはありません。<br>「構成を保存」から作成できます。</div>';
-    } else {
-        html += list.map((t) =>
-            '<div class="tm-row" data-id="' + t.id + '" data-name="' + escapeHtml(t.name) + '">'
-            + '<button type="button" class="tm-item" data-act="apply">'
-            + '<span>' + escapeHtml(t.name) + '</span>'
-            + '<span class="tm-count">' + (t.shared ? '共有・' : '') + t.count + 'ブロック</span></button>'
-            // 共有テンプレートは閲覧・適用のみ（名前変更・上書き・削除はできない）
-            + (t.shared ? '' : '<span class="tm-actions">'
-            + '<button type="button" class="tm-act" data-act="rename" title="名前を変更">✏️</button>'
-            + '<button type="button" class="tm-act" data-act="overwrite" title="現在の構成で上書き保存">⬆️</button>'
-            + '<button type="button" class="tm-act" data-act="delete" title="削除">🗑️</button>'
-            + '</span>')
-            + '</div>'
-        ).join('');
-    }
-    tplMenu.innerHTML = html;
-    // アンカー（適用ボタン）の真下に配置。画面右端からはみ出さないよう調整
-    const rect = tplMenuAnchor.getBoundingClientRect();
-    tplMenu.classList.add('show');
-    const menuWidth = tplMenu.offsetWidth;
-    let left = rect.left;
-    if (left + menuWidth > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    tplMenu.style.left = left + 'px';
-    tplMenu.style.top = (rect.bottom + 6) + 'px';
-}
-
-// メニュー内のクリックをまとめて処理（イベント委譲）
-tplMenu.addEventListener('click', (e) => {
-    const actBtn = e.target.closest('[data-act]');
-    if (!actBtn) return;
-    const row = actBtn.closest('.tm-row');
-    if (!row) return;
-    const id = row.getAttribute('data-id');
-    const name = row.getAttribute('data-name');
-    const act = actBtn.getAttribute('data-act');
-    const area = tplMenuArea;
-
-    if (act === 'apply') {
-        hideTplMenu();
-        applyTemplateById(area, id);
-    } else if (act === 'rename') {
-        const newName = prompt('テンプレート名を変更します', name);
-        if (newName === null || !newName.trim()) return;
-        postJson('/templates/' + id + '/rename', { name: newName.trim() })
-            .then((data) => {
-                if (data && data.error) { alert(data.error); return; }
-                showToast('名前を変更しました');
-                openTplMenu(tplMenuAnchor, area);
-            }).catch(() => alert('名前の変更に失敗しました。'));
-    } else if (act === 'overwrite') {
-        const sections = collectSections(area);
-        if (!sections.length) { alert('保存できるブロックがありません。'); return; }
-        if (!confirm('テンプレート「' + name + '」を、現在の' + AREA_LABEL[area]
-            + '構成（' + sections.length + 'ブロック）で上書きします。よろしいですか？')) return;
-        postJson('/templates/' + id + '/overwrite', {
-            type: area.toUpperCase(),
-            sections: sections
-        }).then((data) => {
-            if (data && data.error) { alert(data.error); return; }
-            showToast('テンプレート「' + name + '」を上書きしました');
-            openTplMenu(tplMenuAnchor, area);
-        }).catch(() => alert('上書きに失敗しました。'));
-    } else if (act === 'delete') {
-        if (!confirm('テンプレート「' + name + '」を削除します。よろしいですか？')) return;
-        fetch('/templates/' + id, { method: 'DELETE' })
-            .then((res) => {
-                if (!res.ok) throw new Error('delete failed');
-                showToast('テンプレートを削除しました');
-                openTplMenu(tplMenuAnchor, area);
-            }).catch(() => alert('削除に失敗しました。'));
-    }
-});
-
-function applyTemplateById(area, id) {
-    fetch('/templates/' + id)
-        .then((res) => {
-            if (!res.ok) throw new Error('load failed');
-            return res.json();
-        })
-        .then((data) => {
-            const sections = data.sections || [];
-            if (!sections.length) {
-                alert('このテンプレートには適用できるブロックがありません。');
-                return;
-            }
-            const existing = getSectionList(area).querySelectorAll('.section-card').length;
-            if (existing > 0 &&
-                !confirm('現在の' + AREA_LABEL[area] + 'ブロック（' + existing
-                    + '件）をテンプレートの構成に置き換えます。よろしいですか？\n'
-                    + '※「変更を保存」を押すまでデータベースには反映されません。')) {
-                return;
-            }
-            const list = getSectionList(area);
-            list.innerHTML = '';
-            sections.forEach((s) => list.appendChild(buildCard(area, s)));
-            showToast('テンプレート「' + (data.name || '') + '」を適用しました');
-        })
-        .catch(() => alert('テンプレートの適用に失敗しました。'));
-}
-
-// JSON POST 共通処理（成功・業務エラーともに本文を返す）
-function postJson(url, payload) {
-    return fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then((res) => res.json().catch(() => ({})));
-}
-
-// 汎用トースト（保存トーストを使い回す）
 function showToast(message) {
     const toast = document.getElementById('save-toast');
     toast.textContent = message;

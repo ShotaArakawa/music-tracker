@@ -107,12 +107,13 @@ public class SongService {
             form.setUser(user);
             form.setTags(resolvedTags);
             form.setListOrder(songRepository.findMaxListOrderByUser(user) + 1);
+            form.setDeadlineDone(form.isCompleted());
             return songRepository.save(form);
         }
         // 更新：所有権チェックのうえ、フォーム項目だけを既存エンティティへ反映
         Song existing = findOwned(form.getId(), user);
         existing.setTitle(form.getTitle());
-        existing.setStatus(form.getStatus());
+        existing.changeStatus(form.getStatus());
         existing.setMemo(form.getMemo());
         existing.setTags(resolvedTags);
         return songRepository.save(existing);
@@ -209,7 +210,7 @@ public class SongService {
      *
      * @param field 更新対象（title / memo / deadline / deadlineDone / status / tagId）
      * @param value 新しい値（文字列）。deadline は {@code yyyy-MM-dd}（空なら納期なし）、
-     *              deadlineDone は {@code true} / {@code false}
+     *              deadlineDone は {@code true} / {@code false}（ステータス「完了」と連動する）
      * @return 更新後の曲
      */
     @Transactional
@@ -227,10 +228,11 @@ public class SongService {
             }
             case "memo" -> song.setMemo(value);
             case "deadline" -> song.setDeadline(parseDeadline(value));
-            case "deadlineDone" -> song.setDeadlineDone(Boolean.parseBoolean(value));
+            // 「完了」チェックはステータス「完了」と連動する
+            case "deadlineDone" -> song.markCompleted(Boolean.parseBoolean(value));
             case "status" -> {
                 try {
-                    song.setStatus(Status.valueOf(value));
+                    song.changeStatus(Status.valueOf(value));
                 } catch (IllegalArgumentException | NullPointerException e) {
                     throw new IllegalArgumentException("不正なステータスです: " + value);
                 }

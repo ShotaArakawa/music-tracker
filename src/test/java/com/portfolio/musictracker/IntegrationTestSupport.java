@@ -3,7 +3,6 @@ package com.portfolio.musictracker;
 import com.portfolio.musictracker.chordchart.ChordChartRepository;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.User;
-import com.portfolio.musictracker.repository.SectionTemplateRepository;
 import com.portfolio.musictracker.repository.SongRepository;
 import com.portfolio.musictracker.repository.TagRepository;
 import com.portfolio.musictracker.repository.UserRepository;
@@ -39,8 +38,6 @@ public abstract class IntegrationTestSupport {
     @Autowired
     protected SongRepository songRepository;
     @Autowired
-    protected SectionTemplateRepository templateRepository;
-    @Autowired
     private TransactionTemplate transactionTemplate;
     @Autowired
     private ChordChartRepository chordChartRepository;
@@ -53,7 +50,6 @@ public abstract class IntegrationTestSupport {
     @BeforeEach
     void resetData() {
         chordChartRepository.deleteAll();
-        templateRepository.deleteAll();
         songRepository.deleteAll();
         tagRepository.deleteAll();
         userRepository.deleteAll();

@@ -161,6 +161,54 @@ class SongControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    void 完了チェックとステータス完了は連動し外すと直前のステータスに戻る() throws Exception {
+        Song song = createSong(alice, "曲");
+        song.setStatus(com.portfolio.musictracker.entity.Status.ARRANGING);
+        songRepository.save(song);
+
+        // チェックを入れる → ステータス「完了」
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadlineDone\",\"value\":\"true\"}"))
+                .andExpect(jsonPath("$.statusName").value("RELEASED"))
+                .andExpect(jsonPath("$.statusLabel").value("完了"));
+        // チェックを外す → 直前の「編曲中」に戻る
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"deadlineDone\",\"value\":\"false\"}"))
+                .andExpect(jsonPath("$.statusName").value("ARRANGING"))
+                .andExpect(jsonPath("$.deadlineDone").value(false));
+        // ステータスで「完了」を選ぶ → チェックも入る
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"status\",\"value\":\"RELEASED\"}"))
+                .andExpect(jsonPath("$.deadlineDone").value(true));
+        // 完了以外のステータスを選ぶ → チェックが外れる
+        mockMvc.perform(post("/songs/" + song.getId() + "/field").with(as(alice)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"field\":\"status\",\"value\":\"MELODY_MAKING\"}"))
+                .andExpect(jsonPath("$.deadlineDone").value(false))
+                .andExpect(jsonPath("$.statusLabel").value("作曲中"));
+    }
+
+    @Test
+    void 完了した曲はバックアップ一覧に表示する() throws Exception {
+        createSong(alice, "ActiveSongX");
+        Song done = createSong(alice, "DoneSongX");
+        done.changeStatus(com.portfolio.musictracker.entity.Status.RELEASED);
+        songRepository.save(done);
+
+        String html = mockMvc.perform(get("/songs").with(as(alice)))
+                .andReturn().getResponse().getContentAsString();
+        int list = html.indexOf("🎵 楽曲一覧");
+        int backup = html.indexOf("🗂 バックアップ一覧");
+        assertThat(list).isPositive();
+        assertThat(backup).isGreaterThan(list);
+        assertThat(html.indexOf("ActiveSongX")).isBetween(list, backup);
+        assertThat(html.indexOf("DoneSongX")).isGreaterThan(backup);
+    }
+
+    @Test
     void 未ログインはログイン画面へ() throws Exception {
         mockMvc.perform(get("/songs"))
                 .andExpect(status().is3xxRedirection())

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <th:block th:replace="~{fragments/head :: commonHead('作曲トラッカー')}"></th:block>
+    <th:block th:replace="~{fragments/head :: commonHead('Music-Tracker')}"></th:block>
     <style>
         /* インライン編集できるセルであることを示す */
         td.editable { cursor: pointer; }
@@ -66,6 +66,48 @@
         }
         .tag-chip button:hover { color: #dc3545; background: #fde8e8; }
 
+        /* ---- セクション（楽曲一覧 / バックアップ一覧） ---- */
+        .section-title {
+            font-size: 1.15rem; font-weight: 700; color: #343a40;
+            display: flex; align-items: center;
+            padding-bottom: .4rem; margin-bottom: .8rem;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .song-section[data-archive="true"] .section-title { color: #6c757d; }
+        /* 楽曲一覧とバックアップ一覧で列の位置をそろえる */
+        .song-section table { table-layout: fixed; min-width: 860px; }
+        .song-section th:nth-child(1) { width: 34px; }
+        .song-section th:nth-child(2) { width: 22%; }
+        .song-section th:nth-child(3) { width: 13%; }
+        .song-section th:nth-child(4) { width: 17%; }
+        .song-section th:nth-child(5) { width: 17%; }
+        .song-section th:nth-child(6) { width: 4.5rem; }
+        .song-section th:nth-child(7) { width: 15.5rem; }
+        .song-section td { overflow-wrap: anywhere; }
+        .archive-table td { color: #6c757d; }
+
+        /* ---- ヒント（編集できる場所にカーソルを合わせると、半透明の吹き出しで表示） ---- */
+        .has-hint { position: relative; }
+        .has-hint::after {
+            content: attr(data-hint);
+            position: absolute; left: 50%; bottom: calc(100% + 2px);
+            transform: translate(-50%, 4px);
+            z-index: 1500;
+            background: rgba(33, 37, 41, .78);
+            color: #fff; font-size: .74rem; font-weight: 400; font-style: normal;
+            white-space: nowrap; pointer-events: none;
+            padding: .3rem .6rem; border-radius: .4rem;
+            opacity: 0; visibility: hidden;
+            transition: opacity .15s ease .35s, transform .15s ease .35s, visibility 0s linear .5s;
+            backdrop-filter: blur(2px);
+        }
+        .has-hint:hover::after {
+            opacity: 1; visibility: visible; transform: translate(-50%, 0);
+            transition: opacity .15s ease .35s, transform .15s ease .35s, visibility 0s linear .35s;
+        }
+        /* 編集中・ポップアップ表示中はヒントを出さない */
+        .has-hint.editing::after { display: none; }
+
         /* ---- モバイルカード ---- */
         .song-card {
             background: #fff;
@@ -99,7 +141,7 @@
 <div class="container py-4">
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h1 class="h3 mb-0">🎵 作曲トラッカー</h1>
+        <h1 class="h3 mb-0">🎵 Music-Tracker</h1>
         <div class="d-flex gap-2 flex-wrap">
             <a th:if="${lastOpenedSong != null}"
                th:href="@{/songs/{id}(id=${lastOpenedSong.id})}"
@@ -120,11 +162,6 @@
 
     <!-- 保存・削除後のメッセージ -->
     <div th:if="${message}" class="alert alert-success" role="alert" th:text="${message}"></div>
-
-    <p class="text-muted small d-none d-md-block">
-        💡 曲名・ステータス・タグ・納期のセルをクリックすると、その場で編集できます（自動保存）。
-        納期を過ぎた曲は行が赤くなります。対応が済んだら「完了」にチェックを入れると警告が消えます。
-    </p>
 
     <!-- タグ絞り込みとタグ管理 -->
     <div class="mb-4">
@@ -166,124 +203,134 @@
         </div>
     </div>
 
-    <!-- 曲一覧 -->
-    <div th:if="${songs.isEmpty()}" class="alert alert-info">
-        まだ曲が登録されていません。「＋ 新規登録」から追加してみましょう。
-    </div>
+    <!-- 楽曲一覧（作業中の曲）と、完了した曲のバックアップ一覧 -->
+    <section th:each="sec : ${sections}" class="song-section mb-5" th:attr="data-archive=${sec.archive}">
+        <h2 class="section-title">
+            <span th:text="${sec.archive} ? '🗂 ' + ${sec.title} : '🎵 ' + ${sec.title}">楽曲一覧</span>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-1"
+                  th:text="${sec.songs.size()} + '曲'">0曲</span>
+        </h2>
 
-    <!-- デスクトップ: テーブル表示 -->
-    <div class="table-responsive d-none d-md-block" th:unless="${songs.isEmpty()}">
-        <table class="table table-hover align-middle bg-white shadow-sm rounded">
-            <thead class="table-light">
-            <tr>
-                <th scope="col" class="drag-cell"></th>
-                <th scope="col">曲名</th>
-                <th scope="col">ステータス</th>
-                <th scope="col">タグ</th>
-                <th scope="col">納期</th>
-                <th scope="col" class="done-cell">完了</th>
-                <th scope="col" class="text-end">操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="song : ${songs}" th:with="dl=${deadlines[song.id]}"
-                th:attr="data-song-id=${song.id}"
-                th:classappend="${dl != null and dl.overdue} ? 'table-danger' : ''">
+        <div th:if="${sec.songs.isEmpty()}" class="alert alert-light border text-muted" th:text="${sec.emptyMessage}">
+            まだ曲がありません。
+        </div>
 
-                <!-- ドラッグハンドル -->
-                <td class="drag-cell">
-                    <span class="row-handle" title="ドラッグで並び替え">⠿</span>
-                </td>
+        <!-- デスクトップ: テーブル表示 -->
+        <div class="table-responsive d-none d-md-block" th:unless="${sec.songs.isEmpty()}">
+            <table class="table table-hover align-middle bg-white shadow-sm rounded"
+                   th:classappend="${sec.archive} ? 'archive-table' : ''">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col" class="drag-cell"></th>
+                    <th scope="col">曲名</th>
+                    <th scope="col">ステータス</th>
+                    <th scope="col">タグ</th>
+                    <th scope="col">納期</th>
+                    <th scope="col" class="done-cell">完了</th>
+                    <th scope="col" class="text-end">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}"
+                    th:attr="data-song-id=${song.id}"
+                    th:classappend="${dl != null and dl.overdue} ? 'table-danger' : ''">
 
-                <!-- 曲名（インライン編集） -->
-                <td class="fw-bold editable" data-field="title"
-                    th:attr="data-value=${song.title}">
-                    <span class="cell-value" th:text="${song.title}">曲名</span>
-                </td>
+                    <!-- ドラッグハンドル -->
+                    <td class="drag-cell has-hint" data-hint="ドラッグで並び替え">
+                        <span class="row-handle">⠿</span>
+                    </td>
 
-                <!-- ステータス（クリックで選択ポップアップ） -->
-                <td class="editable" data-field="status"
-                    th:attr="data-value=${song.status.name()}">
-                    <span class="cell-value badge"
+                    <!-- 曲名（インライン編集） -->
+                    <td class="fw-bold editable has-hint" data-field="title" data-hint="クリックして曲名を編集"
+                        th:attr="data-value=${song.title}">
+                        <span class="cell-value" th:text="${song.title}">曲名</span>
+                    </td>
+
+                    <!-- ステータス（クリックで選択ポップアップ） -->
+                    <td class="editable has-hint" data-field="status" data-hint="クリックしてステータスを選択"
+                        th:attr="data-value=${song.status.name()}">
+                        <span class="cell-value badge"
+                              th:classappend="${song.status.colorClass}"
+                              th:text="${song.status.label}">ステータス</span>
+                    </td>
+
+                    <!-- タグ（クリックで選択ポップアップ：単一選択） -->
+                    <td class="editable has-hint" data-field="tagId" data-hint="クリックしてタグを選択"
+                        th:attr="data-value=${song.tags.isEmpty()} ? '' : ${song.tags.iterator().next().id}">
+                        <span class="cell-value">
+                            <th:block th:if="${song.tags.isEmpty()}">
+                                <span class="cell-empty">（なし）</span>
+                            </th:block>
+                            <span th:each="tag : ${song.tags}"
+                                  class="badge bg-light text-dark border me-1"
+                                  th:text="${tag.name}">タグ</span>
+                        </span>
+                    </td>
+
+                    <!-- 納期（クリックでカレンダーから選択） -->
+                    <td class="editable text-nowrap has-hint" data-field="deadline"
+                        data-hint="クリックしてカレンダーから納期を選択"
+                        th:attr="data-value=${dl != null} ? ${dl.date} : ''">
+                        <span class="cell-value small">
+                            <th:block th:if="${#strings.isEmpty(song.deadline)}"><span class="cell-empty">（未設定）</span></th:block>
+                            <th:block th:unless="${#strings.isEmpty(song.deadline)}">
+                                <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">2026/06/10</span>
+                                <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge ms-1"
+                                      th:text="${-dl.daysUntil} + '日超過'">超過</span>
+                            </th:block>
+                        </span>
+                    </td>
+
+                    <!-- 完了チェック（ステータス「完了」と連動。完了した曲はバックアップ一覧へ） -->
+                    <td class="done-cell has-hint"
+                        th:attr="data-hint=${sec.archive} ? 'チェックを外すと楽曲一覧に戻ります' : 'チェックすると「完了」にしてバックアップ一覧へ移動'">
+                        <input type="checkbox" class="form-check-input done-check" th:checked="${song.deadlineDone}"
+                               aria-label="完了">
+                    </td>
+
+                    <!-- 操作（スタジオを開く・削除） -->
+                    <td class="text-end text-nowrap">
+                        <a th:href="@{/songs/{id}(id=${song.id})}"
+                           class="btn btn-primary fw-bold px-3">🎚️ スタジオを開く</a>
+                        <form th:action="@{/songs/{id}/delete(id=${song.id})}" method="post" class="d-inline"
+                              onsubmit="return confirm('本当に削除しますか？');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- モバイル: カード型一覧 -->
+        <div class="d-md-none" th:unless="${sec.songs.isEmpty()}">
+            <div th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}" class="song-card"
+                 th:attr="data-song-id=${song.id}"
+                 th:classappend="${dl != null and dl.overdue} ? 'overdue' : ''">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
+                    <span class="badge flex-shrink-0"
                           th:classappend="${song.status.colorClass}"
                           th:text="${song.status.label}">ステータス</span>
-                </td>
-
-                <!-- タグ（クリックで選択ポップアップ：単一選択） -->
-                <td class="editable" data-field="tagId"
-                    th:attr="data-value=${song.tags.isEmpty()} ? '' : ${song.tags.iterator().next().id}">
-                    <span class="cell-value">
-                        <th:block th:if="${song.tags.isEmpty()}">
-                            <span class="cell-empty">（なし）</span>
-                        </th:block>
-                        <span th:each="tag : ${song.tags}"
-                              class="badge bg-light text-dark border me-1"
-                              th:text="${tag.name}">タグ</span>
-                    </span>
-                </td>
-
-                <!-- 納期（クリックでカレンダーから選択） -->
-                <td class="editable text-nowrap" data-field="deadline"
-                    th:attr="data-value=${dl != null} ? ${dl.date} : ''">
-                    <span class="cell-value small">
-                        <th:block th:if="${#strings.isEmpty(song.deadline)}"><span class="cell-empty">（未設定）</span></th:block>
-                        <th:block th:unless="${#strings.isEmpty(song.deadline)}">
-                            <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">2026/06/10</span>
-                            <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge ms-1"
-                                  th:text="${-dl.daysUntil} + '日超過'">超過</span>
-                        </th:block>
-                    </span>
-                </td>
-
-                <!-- 納期の対応済みチェック（チェックすると期限超過の警告を出さない） -->
-                <td class="done-cell">
-                    <input type="checkbox" class="form-check-input done-check" th:checked="${song.deadlineDone}"
-                           title="納期の対応が済んだらチェック（期限超過の警告を出さない）" aria-label="納期の対応済み">
-                </td>
-
-                <!-- 操作（スタジオを開く・削除） -->
-                <td class="text-end text-nowrap">
-                    <a th:href="@{/songs/{id}(id=${song.id})}"
-                       class="btn btn-primary fw-bold px-3">🎚️ スタジオを開く</a>
-                    <form th:action="@{/songs/{id}/delete(id=${song.id})}" method="post" class="d-inline"
-                          onsubmit="return confirm('本当に削除しますか？');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- モバイル: カード型一覧 -->
-    <div class="d-md-none" th:unless="${songs.isEmpty()}">
-        <div th:each="song : ${songs}" th:with="dl=${deadlines[song.id]}" class="song-card"
-             th:attr="data-song-id=${song.id}"
-             th:classappend="${dl != null and dl.overdue} ? 'overdue' : ''">
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
-                <span class="badge flex-shrink-0"
-                      th:classappend="${song.status.colorClass}"
-                      th:text="${song.status.label}">ステータス</span>
+                </div>
+                <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
+                    <span th:each="tag : ${song.tags}"
+                          class="badge bg-light text-dark border"
+                          th:text="${tag.name}">タグ</span>
+                </div>
+                <div class="small text-muted mb-2 d-flex align-items-center gap-2 flex-wrap">
+                    <span th:unless="${#strings.isEmpty(song.deadline)}">📅 <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">納期</span></span>
+                    <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge"
+                          th:text="${-dl.daysUntil} + '日超過'">超過</span>
+                    <label class="d-inline-flex align-items-center gap-1 ms-auto">
+                        <input type="checkbox" class="form-check-input done-check m-0" th:checked="${song.deadlineDone}">
+                        完了
+                    </label>
+                </div>
+                <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
             </div>
-            <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
-                <span th:each="tag : ${song.tags}"
-                      class="badge bg-light text-dark border"
-                      th:text="${tag.name}">タグ</span>
-            </div>
-            <div th:unless="${#strings.isEmpty(song.deadline)}"
-                 class="small text-muted mb-2 d-flex align-items-center gap-2 flex-wrap">
-                <span>📅 <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">納期</span></span>
-                <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge"
-                      th:text="${-dl.daysUntil} + '日超過'">超過</span>
-                <label class="d-inline-flex align-items-center gap-1 ms-auto">
-                    <input type="checkbox" class="form-check-input done-check m-0" th:checked="${song.deadlineDone}">
-                    完了
-                </label>
-            </div>
-            <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
         </div>
-    </div>
+    </section>
 
     <!-- スマホ用 FAB（新規登録） -->
     <a th:href="@{/songs/new}" class="btn btn-primary fab d-md-none" title="新規登録">＋</a>

@@ -52,9 +52,18 @@ public class Song {
     @Column(length = 50)
     private String deadline;
 
-    /** 納期の対応が済んだか。チェックされた曲は納期を過ぎても超過として警告しない。 */
+    /**
+     * 完了しているか（曲一覧の「完了」チェック）。ステータス「完了」と常に連動させる
+     * （{@link #changeStatus} / {@link #markCompleted} 経由で変更する）。
+     * 完了した曲は納期を過ぎても超過として警告せず、バックアップ一覧に表示する。
+     */
     @Column(nullable = false)
     private boolean deadlineDone = false;
+
+    /** 「完了」にする直前のステータス。チェックを外したときに戻すために覚えておく。 */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private Status previousStatus;
 
     @NotNull(message = "ステータスを選択してください")
     @Enumerated(EnumType.STRING)
@@ -163,6 +172,50 @@ public class Song {
 
     public void setDeadlineDone(boolean deadlineDone) {
         this.deadlineDone = deadlineDone;
+    }
+
+    public Status getPreviousStatus() {
+        return previousStatus;
+    }
+
+    public void setPreviousStatus(Status previousStatus) {
+        this.previousStatus = previousStatus;
+    }
+
+    /** 完了しているか（ステータスが「完了」）。 */
+    public boolean isCompleted() {
+        return status == Status.RELEASED;
+    }
+
+    /**
+     * ステータスを変更し、「完了」チェックを連動させる。
+     * 「完了」にするときは直前のステータスを覚えておく。
+     */
+    public void changeStatus(Status newStatus) {
+        if (newStatus == null || newStatus == status) {
+            deadlineDone = isCompleted();
+            return;
+        }
+        if (newStatus == Status.RELEASED) {
+            previousStatus = status;
+        } else {
+            previousStatus = null;
+        }
+        status = newStatus;
+        deadlineDone = isCompleted();
+    }
+
+    /**
+     * 「完了」チェックの切り替え。チェックで「完了」に、外すと完了前のステータスに戻す
+     * （覚えていなければ「フルコーラス完成」）。
+     */
+    public void markCompleted(boolean completed) {
+        if (completed) {
+            changeStatus(Status.RELEASED);
+        } else if (isCompleted()) {
+            changeStatus(previousStatus != null && previousStatus != Status.RELEASED
+                    ? previousStatus : Status.FULL_CHORUS_DONE);
+        }
     }
 
     public Status getStatus() {

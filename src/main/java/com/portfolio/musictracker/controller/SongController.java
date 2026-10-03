@@ -4,6 +4,7 @@ import com.portfolio.musictracker.chordchart.ChordChartTemplate;
 import com.portfolio.musictracker.dto.FieldUpdateRequest;
 import com.portfolio.musictracker.dto.SongDeadline;
 import com.portfolio.musictracker.dto.SongDetailForm;
+import com.portfolio.musictracker.dto.SongListSection;
 import com.portfolio.musictracker.entity.Song;
 import com.portfolio.musictracker.entity.Status;
 import com.portfolio.musictracker.entity.User;
@@ -65,7 +66,14 @@ public class SongController {
                        @AuthenticationPrincipal CustomUserDetails principal, Model model) {
         User user = principal.getUser();
         List<Song> songs = songService.findSongs(user, tagId);
-        model.addAttribute("songs", songs);
+        // 完了した曲は下の「バックアップ一覧」に分ける
+        model.addAttribute("sections", List.of(
+                new SongListSection("楽曲一覧", false,
+                        songs.stream().filter(s -> !s.isCompleted()).toList(),
+                        "まだ曲が登録されていません。「＋ 新規登録」から追加してみましょう。"),
+                new SongListSection("バックアップ一覧", true,
+                        songs.stream().filter(Song::isCompleted).toList(),
+                        "完了した曲はまだありません。「完了」にチェックすると、ここに移動します。")));
         model.addAttribute("tags", songService.findAllTags(user));
         model.addAttribute("selectedTagId", tagId);
         model.addAttribute("statuses", Status.values());

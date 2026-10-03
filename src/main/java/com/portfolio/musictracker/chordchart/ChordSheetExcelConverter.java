@@ -284,6 +284,11 @@ public final class ChordSheetExcelConverter {
     public static byte[] write(ChordSheet sheetData) {
         ChordSheet data = sheetData.normalize();
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            // Excel の列幅は「既定フォントの数字の幅」が単位になる。テンプレートと同じ Arial 10pt
+            // （数字幅 7px）にしておかないと、Excel で開いたときに列幅が画面とずれる
+            XSSFFont defaultFont = wb.getFontAt(0);
+            defaultFont.setFontName("Arial");
+            defaultFont.setFontHeightInPoints((short) 10);
             Sheet sheet = wb.createSheet("コード譜");
             sheet.setDisplayGridlines(false);
             sheet.setPrintGridlines(false);
@@ -353,7 +358,8 @@ public final class ChordSheetExcelConverter {
             if (s.underline) {
                 f.setUnderline(Font.U_SINGLE);
             }
-            f.setFontHeight(s.fontSize == null ? 10 : Math.round(s.fontSize * 0.75 * 2) / 2.0);
+            // 画面は px の整数で持つため、pt に戻すときは整数に丸める（17pt → 23px → 17pt）
+            f.setFontHeight(s.fontSize == null ? 10 : Math.max(1, Math.round(s.fontSize * 0.75)));
             if (s.color != null) {
                 f.setColor(xssfColor(s.color));
             }

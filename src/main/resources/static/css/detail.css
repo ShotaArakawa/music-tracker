@@ -69,7 +69,9 @@ body { background-color: #f4f5f7; margin: 0; }
     padding: 0 1rem;
     border-top: 1px solid #eef0f3;
 }
-.save-area { display: flex; align-items: center; gap: .5rem; }
+.save-area { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; }
+/* 変更を保存：作業中に押しやすいよう大きめにする */
+.save-btn { font-weight: 700; padding: .5rem 1.6rem; font-size: 1.05rem; }
 .studio-tab {
     border: 0; background: transparent;
     padding: .55rem 1.1rem;
@@ -161,45 +163,6 @@ body { background-color: #f4f5f7; margin: 0; }
     min-width: 220px;
     display: none;
 }
-
-/* ---- テンプレート選択ポップオーバー ---- */
-.template-menu {
-    position: fixed;
-    z-index: 2100;
-    min-width: 240px; max-width: 340px;
-    max-height: 60vh; overflow: auto;
-    background: #fff;
-    border: 1px solid #d7dde4;
-    border-radius: .6rem;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, .16);
-    padding: .4rem;
-    display: none;
-}
-.template-menu.show { display: block; }
-.template-menu .tm-title { font-size: .72rem; color: #8a929b; font-weight: 700; padding: .2rem .4rem .35rem; }
-.template-menu .tm-row {
-    display: flex; align-items: center; gap: .2rem;
-    border-radius: .4rem; padding: .1rem .15rem;
-}
-.template-menu .tm-row:hover { background: #f6f9ff; }
-.template-menu .tm-item {
-    flex: 1 1 auto;
-    display: flex; justify-content: space-between; align-items: center; gap: .5rem;
-    text-align: left;
-    border: none; background: transparent;
-    border-radius: .4rem; padding: .4rem .5rem;
-}
-.template-menu .tm-item:hover { background: #eaf1ff; }
-.template-menu .tm-item .tm-count { font-size: .7rem; color: #9aa3ad; white-space: nowrap; }
-.template-menu .tm-actions { display: flex; gap: .1rem; flex: 0 0 auto; }
-.template-menu .tm-act {
-    border: none; background: transparent; cursor: pointer;
-    font-size: .9rem; line-height: 1; padding: .25rem .3rem; border-radius: .35rem;
-    color: #8a929b;
-}
-.template-menu .tm-act:hover { background: #e7ecf3; }
-.template-menu .tm-act[data-act="delete"]:hover { background: #fde8e8; }
-.template-menu .tm-empty { color: #9aa3ad; font-size: .82rem; padding: .5rem; }
 
 /* ---- コード譜エディタ（Jspreadsheet） ---- */
 .chord-sheet { font-family: 'M PLUS Rounded 1c', sans-serif; }

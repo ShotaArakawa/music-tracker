@@ -76,11 +76,35 @@ function renderCell(td, field, data) {
 function saveField(songId, field, value) {
     return postJson('/songs/' + songId + '/field', { field: field, value: value })
         .then((data) => {
+            if (movesSection(songId, data.deadlineDone)) {
+                // 「完了」になった／外れた曲は、楽曲一覧とバックアップ一覧の間で移動させる
+                sessionStorage.setItem('mt-list-toast', data.deadlineDone
+                    ? '「' + data.title + '」を完了にして、バックアップ一覧へ移動しました'
+                    : '「' + data.title + '」を楽曲一覧に戻しました');
+                location.reload();
+                return new Promise(() => {});
+            }
             applyOverdue(songId, data.overdue);
             showToast('保存しました', true);
             return data;
         });
 }
+
+// 完了状態と、いま表示されているセクション（バックアップ一覧か）が食い違うか
+function movesSection(songId, completed) {
+    const el = document.querySelector('[data-song-id="' + songId + '"]');
+    const section = el && el.closest('[data-archive]');
+    return !!section && (section.dataset.archive === 'true') !== !!completed;
+}
+
+// 移動後（再読み込み後）のトースト
+(function showPendingToast() {
+    const message = sessionStorage.getItem('mt-list-toast');
+    if (message) {
+        sessionStorage.removeItem('mt-list-toast');
+        showToast(message, true);
+    }
+})();
 
 function commit(td, field, value, originalHTML) {
     const songId = td.closest('[data-song-id]').dataset.songId;
@@ -227,19 +251,11 @@ document.querySelectorAll('td.editable').forEach((td) => {
     });
 });
 
-/* ---- 完了チェック：期限超過の警告を止める ---- */
+/* ---- 完了チェック：ステータス「完了」と連動し、バックアップ一覧へ移動する ---- */
 document.querySelectorAll('.done-check').forEach((box) => {
     box.addEventListener('change', () => {
         const songId = box.closest('[data-song-id]').dataset.songId;
         saveField(songId, 'deadlineDone', box.checked ? 'true' : 'false')
-            .then(() => {
-                // PC 表示とスマホ表示のチェックをそろえる
-                document.querySelectorAll('[data-song-id="' + songId + '"] .done-check')
-                    .forEach((b) => { b.checked = box.checked; });
-                // 超過バッジは対応済みにしたら隠す
-                document.querySelectorAll('[data-song-id="' + songId + '"] .overdue-badge')
-                    .forEach((b) => { b.hidden = box.checked; });
-            })
             .catch((e) => {
                 box.checked = !box.checked;
                 showToast(e.message, false);
@@ -309,8 +325,8 @@ function saveOrder() {
         .catch(() => showToast('順序の保存に失敗しました', false));
 }
 
-const tbody = document.querySelector('tbody');
-if (tbody) {
+// 楽曲一覧・バックアップ一覧それぞれの表の中で並び替える（表をまたいだ移動はしない）
+document.querySelectorAll('tbody').forEach((tbody) => {
     tbody.querySelectorAll('tr').forEach((tr) => {
         const handle = tr.querySelector('.row-handle');
         if (!handle) return;
@@ -330,7 +346,7 @@ if (tbody) {
         });
     });
     tbody.addEventListener('dragover', (e) => {
-        if (!dragRow) return;
+        if (!dragRow || dragRow.parentElement !== tbody) return;
         e.preventDefault();
         const after = getRowAfter(tbody, e.clientY);
         if (after == null) {
@@ -340,4 +356,4 @@ if (tbody) {
         }
     });
     tbody.addEventListener('drop', (e) => e.preventDefault());
-}
+});
