@@ -193,6 +193,10 @@ public class SongService {
     @Transactional
     public Song updateAudio(Long id, MultipartFile file, User user) {
         Song song = findOwned(id, user);
+        if (user.isDemo()) {
+            // お試しアカウントはストレージを使わせない
+            throw new IllegalArgumentException("お試しアカウントではデモ音源をアップロードできません。新規登録するとご利用いただけます");
+        }
         String stored = audioStorage.store(file, id);
         // DB 更新がロールバックされたら、保存したばかりのファイルを片付ける
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

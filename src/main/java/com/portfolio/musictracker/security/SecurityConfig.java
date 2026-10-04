@@ -12,7 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Spring Security 設定。
  * <ul>
- * <li>ログイン／ユーザー登録／静的リソース以外は認証必須</li>
+ * <li>ログイン／ユーザー登録／お試しログイン／静的リソース以外は認証必須</li>
  * <li>パスワードは {@link BCryptPasswordEncoder} で照合・ハッシュ化</li>
  * <li>フォームログイン（独自ログイン画面 /login）とログアウトを有効化</li>
  * <li>CSRF 対策を有効化（フォーム・Ajax ともにトークンを送る）</li>
@@ -35,7 +35,7 @@ public class SecurityConfig {
             UserDetailsService userDetailsService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/login", "/signup", "/api/health",
+                        .requestMatchers("/", "/login", "/signup", "/api/health", "/demo/start",
                                 "/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico",
                                 // PWA関連（manifest / Service Worker / アイコン）は未認証で取得できるようにする
                                 "/manifest.json", "/sw.js", "/icon.png")
@@ -49,7 +49,10 @@ public class SecurityConfig {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/logout")
-                        .logoutSuccessUrl("/login?logout")
+                        // お試しアカウントの「新規登録へ」（/logout?to=signup）は新規登録画面へ、それ以外はログイン画面へ
+                        .logoutSuccessHandler((request, response, authentication) ->
+                                response.sendRedirect(request.getContextPath()
+                                        + ("signup".equals(request.getParameter("to")) ? "/signup" : "/login?logout")))
                         // ログアウト時は Remember Me の Cookie も明示的に削除する
                         .deleteCookies("remember-me")
                         .permitAll())

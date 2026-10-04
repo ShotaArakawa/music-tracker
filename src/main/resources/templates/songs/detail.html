@@ -25,6 +25,8 @@
             </h1>
         </div>
         <div class="d-flex align-items-center gap-2 flex-shrink-0">
+            <span th:if="${demoUser}" class="badge rounded-pill text-bg-info d-none d-md-inline"
+                  th:title="'お試しアカウントです。データは ' + ${demoTtlHours} + ' 時間後に自動で削除されます'">🧪 お試し中</span>
             <a th:href="@{/profile}" class="btn btn-sm btn-outline-secondary"
                title="プロフィール設定">👤<span class="d-none d-lg-inline" th:text="' ' + ${currentUsername}"> user</span></a>
             <form th:action="@{/logout}" method="post" class="m-0">
@@ -80,7 +82,8 @@
                 <input type="file" name="audioFile" id="audio-file" hidden
                        accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac">
                 <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="audio-pick"
-                        title="MP3 / WAV / M4A / OGG / AAC / FLAC（最大 50MB）"
+                        th:disabled="${demoUser}"
+                        th:title="${demoUser} ? 'お試しアカウントではアップロードできません（新規登録すると使えます）' : 'MP3 / WAV / M4A / OGG / AAC / FLAC（最大 50MB）'"
                         th:text="${song.audioFilePath == null} ? '⬆ アップロード' : '⬆ 差し替え'">⬆ アップロード</button>
             </form>
         </section>

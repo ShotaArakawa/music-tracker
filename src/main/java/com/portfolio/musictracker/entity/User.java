@@ -38,6 +38,13 @@ public class User {
     @Column(nullable = false, length = 20)
     private String role = "USER";
 
+    /**
+     * ランディングページの「テストユーザーで試してみる」で作られたお試しアカウントか。
+     * お試しアカウントは一定時間後に自動で削除され、音源のアップロードやプロフィールの変更はできない。
+     */
+    @Column(nullable = false)
+    private boolean demo = false;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -90,6 +97,14 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public boolean isDemo() {
+        return demo;
+    }
+
+    public void setDemo(boolean demo) {
+        this.demo = demo;
     }
 
     public LocalDateTime getCreatedAt() {

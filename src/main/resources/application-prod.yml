@@ -37,6 +37,13 @@ app:
   init:
     # 本番では既知パスワードの初期ユーザーを作らない
     demo-user: false
+  demo:
+    # ランディングページの「テストユーザーで試してみる」（訪問者ごとにお試しアカウントを作る）
+    enabled: ${DEMO_ENABLED:true}
+    # お試しアカウントを自動で削除するまでの時間
+    ttl-hours: 24
+    # 同時に存在できるお試しアカウントの上限（DB の使いすぎを防ぐ）
+    max-accounts: 200
   audio:
     # 保存先: s3（Cloudflare R2 など）/ local（サーバーのディスク。Render では再デプロイで消える）
     storage: ${AUDIO_STORAGE:local}

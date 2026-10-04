@@ -169,6 +169,16 @@
         </div>
     </div>
 
+    <!-- お試しアカウントの案内 -->
+    <div th:if="${demoUser}" class="alert alert-info d-flex flex-wrap align-items-center gap-2 py-2" role="status">
+        <span>🧪 <strong>お試しアカウント</strong>で利用中です。サンプルの曲を自由に編集してみてください。
+            データは <span th:text="${demoTtlHours}">24</span> 時間後に自動で削除されます。</span>
+        <!-- お試しアカウントからログアウトして新規登録画面へ -->
+        <form th:action="@{/logout(to='signup')}" method="post" class="m-0 ms-auto">
+            <button type="submit" class="btn btn-sm btn-primary text-nowrap">気に入ったら新規登録へ</button>
+        </form>
+    </div>
+
     <!-- 保存・削除後のメッセージ -->
     <div th:if="${message}" class="alert alert-success" role="alert" th:text="${message}"></div>
 

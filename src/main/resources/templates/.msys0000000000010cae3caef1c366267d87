@@ -114,10 +114,10 @@
         </div>
         <div class="row justify-content-center mt-5">
             <div class="col-12 col-xl-11">
-                <button type="button" class="shot" data-zoom="/images/landing/list.webp"
+                <button type="button" class="shot" data-zoom="/images/landing/list.png"
                         data-caption="曲一覧（ステータス・タグ・納期・完了）">
                     <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
-                    <img src="/images/landing/list.webp" width="1400" height="900" fetchpriority="high"
+                    <img src="/images/landing/list.png" width="1400" height="900" fetchpriority="high"
                          alt="曲一覧の画面。曲ごとにステータス・タグ・納期・完了チェックが並び、納期を過ぎた曲の行は赤く表示される">
                 </button>
             </div>
@@ -136,10 +136,10 @@
 
         <div class="row align-items-center g-4 g-lg-5 screen-row">
             <div class="col-12 col-lg-7">
-                <button type="button" class="shot" data-zoom="/images/landing/studio-chord.webp"
+                <button type="button" class="shot" data-zoom="/images/landing/studio-chord.png"
                         data-caption="スタジオ：コード譜">
                     <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
-                    <img src="/images/landing/studio-chord.webp" width="1400" height="900" loading="lazy"
+                    <img src="/images/landing/studio-chord.png" width="1400" height="900" loading="lazy"
                          alt="スタジオのコード譜画面。Excel のテンプレートと同じ見た目の表にコードを書き込める">
                 </button>
             </div>
@@ -155,10 +155,10 @@
 
         <div class="row align-items-center g-4 g-lg-5 screen-row flex-lg-row-reverse">
             <div class="col-12 col-lg-7">
-                <button type="button" class="shot" data-zoom="/images/landing/studio-lyrics.webp"
+                <button type="button" class="shot" data-zoom="/images/landing/studio-lyrics.png"
                         data-caption="スタジオ：歌詞と Key（五度圏）">
                     <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
-                    <img src="/images/landing/studio-lyrics.webp" width="1400" height="900" loading="lazy"
+                    <img src="/images/landing/studio-lyrics.png" width="1400" height="900" loading="lazy"
                          alt="スタジオの歌詞画面。Aメロ・Bメロ・サビのセクションごとに歌詞を書き、Key は五度圏から選べる">
                 </button>
             </div>
@@ -175,10 +175,10 @@
 
         <div class="row align-items-center g-4 g-lg-5 screen-row">
             <div class="col-12 col-lg-7">
-                <button type="button" class="shot" data-zoom="/images/landing/calendar.webp"
+                <button type="button" class="shot" data-zoom="/images/landing/calendar.png"
                         data-caption="制作カレンダー">
                     <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
-                    <img src="/images/landing/calendar.webp" width="1400" height="900" loading="lazy"
+                    <img src="/images/landing/calendar.png" width="1400" height="900" loading="lazy"
                          alt="制作カレンダーの画面。納期のある曲が月のカレンダー上に色分けで表示される">
                 </button>
             </div>
@@ -195,16 +195,16 @@
             <div class="col-12 col-lg-7">
                 <div class="row g-3 justify-content-center">
                     <div class="col-6">
-                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-list.webp"
+                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-list.png"
                                 data-caption="スマホ：曲一覧">
-                            <img src="/images/landing/mobile-list.webp" width="375" height="760" loading="lazy"
+                            <img src="/images/landing/mobile-list.png" width="375" height="760" loading="lazy"
                                  alt="スマホで表示した曲一覧。曲がカード形式で並ぶ">
                         </button>
                     </div>
                     <div class="col-6">
-                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-studio.webp"
+                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-studio.png"
                                 data-caption="スマホ：スタジオ">
-                            <img src="/images/landing/mobile-studio.webp" width="375" height="760" loading="lazy"
+                            <img src="/images/landing/mobile-studio.png" width="375" height="760" loading="lazy"
                                  alt="スマホで表示したスタジオ画面。進捗率・Key・BPM と歌詞が縦に並ぶ">
                         </button>
                     </div>
