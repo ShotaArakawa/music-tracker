@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -35,9 +37,19 @@ public class ScheduleService {
         return toSortedDeadlines(songRepository.findByUser(user));
     }
 
+    /** 一覧画面用：曲ID → 納期情報（納期が解釈できる曲のみ）。 */
+    public Map<Long, SongDeadline> deadlinesBySongId(List<Song> songs) {
+        LocalDate today = LocalDate.now();
+        Map<Long, SongDeadline> map = new HashMap<>();
+        for (Song song : songs) {
+            toSongDeadline(song, today).ifPresent(d -> map.put(song.getId(), d));
+        }
+        return map;
+    }
+
     /**
      * 指定ユーザーのリマインダー対象（納期超過、または今日から
-     * {@value #ALERT_WITHIN_DAYS} 日以内）を納期日の昇順で返す。
+     * {@value #ALERT_WITHIN_DAYS} 日以内）を納期日の昇順で返す。対応済みの曲は含めない。
      */
     public List<SongDeadline> findAlerts(User user) {
         return filterAlerts(findAllWithDeadline(user));
@@ -50,7 +62,7 @@ public class ScheduleService {
 
     private List<SongDeadline> filterAlerts(List<SongDeadline> deadlines) {
         return deadlines.stream()
-                .filter(d -> d.daysUntil() <= ALERT_WITHIN_DAYS)
+                .filter(d -> d.isOverdue() || d.isDueWithin(ALERT_WITHIN_DAYS))
                 .toList();
     }
 
@@ -70,6 +82,7 @@ public class ScheduleService {
                         song.getTitle(),
                         song.getDeadline(),
                         date,
-                        ChronoUnit.DAYS.between(today, date)));
+                        ChronoUnit.DAYS.between(today, date),
+                        song.isDeadlineDone()));
     }
 }

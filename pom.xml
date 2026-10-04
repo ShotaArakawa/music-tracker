@@ -15,7 +15,7 @@
     <artifactId>music-tracker</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>music-tracker</name>
-    <description>作曲トラッカー</description>
+    <description>Music-Tracker</description>
 
     <properties>
         <java.version>21</java.version>
@@ -65,6 +65,33 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- デモ音源の保存先（Cloudflare R2 / S3 互換ストレージ） -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <!-- 非同期クライアントは使わないため Netty を除外して軽量化 -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- コード譜の Excel 読み書き -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.5.1</version>
+        </dependency>
+
+        <!-- コード譜の PDF 出力・読み取り -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.8</version>
+        </dependency>
+
         <!-- 開発時の自動リロード -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -79,7 +106,30 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- テスト用のインメモリ DB（MySQL 互換モード） -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.55.9</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>

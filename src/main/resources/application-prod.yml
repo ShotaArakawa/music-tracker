@@ -31,5 +31,27 @@ server:
 
 # 4. アプリ固有設定（音源の保存先）
 app:
+  security:
+    # 既定値なし：環境変数 REMEMBER_ME_KEY が未設定なら起動を失敗させる
+    remember-me-key: ${REMEMBER_ME_KEY}
+  init:
+    # 本番では既知パスワードの初期ユーザーを作らない
+    demo-user: false
+  demo:
+    # ランディングページの「テストユーザーで試してみる」（訪問者ごとにお試しアカウントを作る）
+    enabled: ${DEMO_ENABLED:true}
+    # お試しアカウントを自動で削除するまでの時間
+    ttl-hours: 24
+    # 同時に存在できるお試しアカウントの上限（DB の使いすぎを防ぐ）
+    max-accounts: 200
   audio:
+    # 保存先: s3（Cloudflare R2 など）/ local（サーバーのディスク。Render では再デプロイで消える）
+    storage: ${AUDIO_STORAGE:local}
     upload-dir: uploaded-audio
+    s3:
+      # R2 の場合: https://<アカウントID>.r2.cloudflarestorage.com
+      endpoint: ${R2_ENDPOINT:}
+      region: ${R2_REGION:auto}
+      bucket: ${R2_BUCKET:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}

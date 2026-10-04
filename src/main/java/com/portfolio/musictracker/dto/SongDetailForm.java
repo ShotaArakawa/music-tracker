@@ -1,34 +1,51 @@
 package com.portfolio.musictracker.dto;
 
+import com.portfolio.musictracker.chordchart.ChordSheet;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 作曲コア画面の「変更を保存」で送られてくる一括保存リクエスト。
  * <p>
- * 歌詞セクション・コードセクションはそれぞれ画面上の表示順で並んだ配列として送られ、
- * 配列の並び順がそのまま {@code sortOrder} になる。
+ * 歌詞セクションは画面上の表示順で並んだ配列として送られ、配列の並び順がそのまま {@code sortOrder} になる。
+ * コード譜は表のデータ全体（{@link ChordSheet}）を送る。null はコード譜なし（削除）を表す。
+ * 世界観・メロディの進捗はスタジオ画面から外したため受け取らない（保存済みの値はそのまま残る）。
+ * Key・BPM は null（送られてこない）なら変更しない。
  */
 public class SongDetailForm {
 
-    private Integer bpm;
     private String musicKey;
-    private String worldViewMemo;
+    private Integer bpm;
+
+    public String getMusicKey() {
+        return musicKey;
+    }
+
+    public void setMusicKey(String musicKey) {
+        this.musicKey = musicKey;
+    }
+
+    public Integer getBpm() {
+        return bpm;
+    }
+
+    public void setBpm(Integer bpm) {
+        this.bpm = bpm;
+    }
+
     private int lyricProgress;
-    private int melodyProgress;
     private int arrangementProgress;
 
     private List<SectionDto> lyricSections = new ArrayList<>();
-    private List<SectionDto> chordSections = new ArrayList<>();
+    private ChordSheet chordSheet;
 
-    /** 1セクション分（歌詞 or コード）のデータ。 */
+    /** 歌詞セクション1件分のデータ。 */
     public static class SectionDto {
         /** 既存セクションのID。新規追加分は null。 */
         private Long id;
         private String name;
         private String content;
-        /** コードセクション個別の Key（転調用）。歌詞セクションでは未使用。 */
-        private String sectionKey;
 
         public Long getId() {
             return id;
@@ -53,38 +70,6 @@ public class SongDetailForm {
         public void setContent(String content) {
             this.content = content;
         }
-
-        public String getSectionKey() {
-            return sectionKey;
-        }
-
-        public void setSectionKey(String sectionKey) {
-            this.sectionKey = sectionKey;
-        }
-    }
-
-    public Integer getBpm() {
-        return bpm;
-    }
-
-    public void setBpm(Integer bpm) {
-        this.bpm = bpm;
-    }
-
-    public String getMusicKey() {
-        return musicKey;
-    }
-
-    public void setMusicKey(String musicKey) {
-        this.musicKey = musicKey;
-    }
-
-    public String getWorldViewMemo() {
-        return worldViewMemo;
-    }
-
-    public void setWorldViewMemo(String worldViewMemo) {
-        this.worldViewMemo = worldViewMemo;
     }
 
     public int getLyricProgress() {
@@ -93,14 +78,6 @@ public class SongDetailForm {
 
     public void setLyricProgress(int lyricProgress) {
         this.lyricProgress = lyricProgress;
-    }
-
-    public int getMelodyProgress() {
-        return melodyProgress;
-    }
-
-    public void setMelodyProgress(int melodyProgress) {
-        this.melodyProgress = melodyProgress;
     }
 
     public int getArrangementProgress() {
@@ -119,11 +96,11 @@ public class SongDetailForm {
         this.lyricSections = lyricSections;
     }
 
-    public List<SectionDto> getChordSections() {
-        return chordSections;
+    public ChordSheet getChordSheet() {
+        return chordSheet;
     }
 
-    public void setChordSections(List<SectionDto> chordSections) {
-        this.chordSections = chordSections;
+    public void setChordSheet(ChordSheet chordSheet) {
+        this.chordSheet = chordSheet;
     }
 }

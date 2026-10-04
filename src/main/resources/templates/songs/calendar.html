@@ -150,6 +150,8 @@
     }
 
     function classFor(ev) {
+        // 対応済みの曲は期限に関係なく通常表示
+        if (ev.done) return 'normal';
         if (ev.overdue) return 'over';
         if (ev.daysUntil != null && ev.daysUntil <= 3) return 'soon';
         return 'normal';
@@ -230,7 +232,8 @@
             const dateParts = ev.date.slice(5).split('-');
             const dateStr = dateParts[0] + '/' + dateParts[1];
             let status;
-            if (ev.overdue) status = '（' + (-1 * ev.daysUntil) + '日超過）';
+            if (ev.done) status = '（完了）';
+            else if (ev.overdue) status = '（' + (-1 * ev.daysUntil) + '日超過）';
             else if (ev.daysUntil === 0) status = '（本日締切）';
             else status = '（あと' + ev.daysUntil + '日）';
             html += '<div class="deadline-item">'

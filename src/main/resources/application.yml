@@ -33,6 +33,27 @@ server:
 
 # アプリ固有設定
 app:
+  security:
+    # Remember Me トークンの署名鍵（ローカル開発用の既定値）
+    remember-me-key: ${REMEMBER_ME_KEY:musictracker-local-dev-key}
+  init:
+    # 初期ユーザー demo / demo1234 を作成する（ローカル開発用。本番では無効）
+    demo-user: true
+  demo:
+    # ランディングページの「テストユーザーで試してみる」（訪問者ごとにお試しアカウントを作る）
+    enabled: ${DEMO_ENABLED:true}
+    # お試しアカウントを自動で削除するまでの時間
+    ttl-hours: 24
+    # 同時に存在できるお試しアカウントの上限（DB の使いすぎを防ぐ）
+    max-accounts: 200
   audio:
-    # アップロードした音声ファイルの保存先（プロジェクト直下の uploaded-audio/）
+    # 保存先: local（ディスク）/ s3（Cloudflare R2 など。設定は application-prod.yml を参照）
+    storage: ${AUDIO_STORAGE:local}
+    # local の保存先（プロジェクト直下の uploaded-audio/）
     upload-dir: uploaded-audio
+    s3:
+      endpoint: ${R2_ENDPOINT:}
+      region: ${R2_REGION:auto}
+      bucket: ${R2_BUCKET:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}

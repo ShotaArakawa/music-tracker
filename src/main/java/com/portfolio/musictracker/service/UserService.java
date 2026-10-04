@@ -19,10 +19,12 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TagService tagService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, TagService tagService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.tagService = tagService;
     }
 
     /**
@@ -41,7 +43,17 @@ public class UserService {
             throw new IllegalArgumentException("そのメールアドレスはすでに登録されています");
         }
         User user = new User(username, passwordEncoder.encode(form.getPassword()), email, "USER");
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        // 新しいユーザーには既定のタグ（ボカロ / バンド / コンペ）を用意する
+        tagService.ensureDefaultTags(saved);
+        return saved;
+    }
+
+    /** お試しアカウントはプロフィール・パスワードを変更できない（一定時間後に削除されるため）。 */
+    private static void rejectDemo(User user) {
+        if (user.isDemo()) {
+            throw new IllegalArgumentException("お試しアカウントではプロフィールやパスワードを変更できません");
+        }
     }
 
     /** ID 指定でユーザーを取得する。 */
@@ -59,6 +71,7 @@ public class UserService {
     @Transactional
     public User updateProfile(Long userId, ProfileForm form) {
         User user = findById(userId);
+        rejectDemo(user);
         String username = form.getUsername() == null ? "" : form.getUsername().trim();
         String email = form.getEmail() == null ? "" : form.getEmail().trim();
 
@@ -87,6 +100,7 @@ public class UserService {
     @Transactional
     public void changePassword(Long userId, PasswordChangeForm form) {
         User user = findById(userId);
+        rejectDemo(user);
         if (!passwordEncoder.matches(form.getCurrentPassword(), user.getPassword())) {
             throw new IllegalArgumentException("現在のパスワードが正しくありません");
         }

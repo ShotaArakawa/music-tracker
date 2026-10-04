@@ -1,96 +1,275 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>作曲トラッカー - 曲を作る、管理する、完成まで届ける。</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="icon" href="/icon.png" type="image/png">
+    <th:block th:replace="~{fragments/head :: commonHead('Music-Tracker - 曲を作る、管理する、完成まで届ける。')}"></th:block>
+    <meta name="description" content="歌詞・コード譜・デモ音源・納期をひとつの場所で管理できる、作曲者のための制作管理アプリ。">
     <style>
+        :root { --lp-ink: #1b2a41; --lp-muted: #5c6670; --lp-accent: #0d6efd; }
+        body { color: var(--lp-ink); }
         .hero-section {
-            background: linear-gradient(160deg, #ddf0fb 0%, #eef7ff 50%, #e8f4fd 100%);
+            background: radial-gradient(1200px 500px at 85% -10%, #d7e9ff 0%, transparent 60%),
+                        linear-gradient(160deg, #eaf4ff 0%, #f6faff 55%, #ffffff 100%);
+            overflow: hidden;
         }
-        .feature-icon {
-            font-size: 2.5rem;
-            line-height: 1;
+        .hero-title { font-weight: 800; letter-spacing: -.01em; line-height: 1.25; }
+        .hero-lead { color: var(--lp-muted); }
+        .demo-note { font-size: .85rem; color: var(--lp-muted); }
+        .btn-demo {
+            font-weight: 700;
+            box-shadow: 0 6px 18px rgba(13, 110, 253, .28);
         }
+
+        /* 画面のスクリーンショット（ブラウザ風の枠） */
+        .shot {
+            display: block; width: 100%;
+            border: 0; padding: 0; background: #fff; cursor: zoom-in;
+            border-radius: .75rem; overflow: hidden;
+            box-shadow: 0 18px 50px rgba(27, 42, 65, .16), 0 2px 6px rgba(27, 42, 65, .08);
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .shot:hover { transform: translateY(-3px); box-shadow: 0 24px 60px rgba(27, 42, 65, .2); }
+        .shot:focus-visible { outline: 3px solid var(--lp-accent); outline-offset: 3px; }
+        .shot-bar {
+            display: flex; align-items: center; gap: 6px;
+            height: 26px; padding: 0 12px; background: #eef1f5; border-bottom: 1px solid #e1e5ea;
+        }
+        .shot-bar span { width: 9px; height: 9px; border-radius: 50%; background: #cfd5dc; }
+        .shot img { display: block; width: 100%; height: auto; }
+        .shot-phone {
+            max-width: 260px; margin: 0 auto; border-radius: 1.6rem;
+            border: 8px solid #1b2a41; box-shadow: 0 18px 50px rgba(27, 42, 65, .22);
+        }
+        .shot-phone img { border-radius: 1rem; }
+
+        .section-eyebrow { font-size: .8rem; font-weight: 700; letter-spacing: .12em; color: var(--lp-accent); }
+        .screen-row + .screen-row { margin-top: 5rem; }
+        .screen-text h3 { font-weight: 800; }
+        .screen-text ul { padding-left: 1.1rem; color: var(--lp-muted); }
+        .screen-text li { margin-bottom: .35rem; }
+        .feature-icon { font-size: 2rem; line-height: 1; }
+        .cta-band { background: linear-gradient(135deg, #0d6efd 0%, #4f46e5 100%); color: #fff; }
+
+        /* 拡大表示 */
+        .zoom-modal .modal-content { background: transparent; border: 0; }
+        .zoom-modal img { width: 100%; height: auto; border-radius: .5rem; background: #fff; }
+        .zoom-caption { color: #fff; text-align: center; margin-top: .6rem; font-weight: 700; }
     </style>
 </head>
-<body class="bg-light">
+<body class="bg-white">
 
 <!-- ナビバー -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
     <div class="container">
-        <a class="navbar-brand fw-bold fs-5" href="#">🎵 作曲トラッカー</a>
+        <a class="navbar-brand fw-bold fs-5" href="#">🎵 Music-Tracker</a>
         <button class="navbar-toggler border-0" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navbarNav"
                 aria-controls="navbarNav" aria-expanded="false" aria-label="メニューを開く">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <div class="ms-auto d-flex gap-2 py-2 py-lg-0">
-                <a href="/login" class="btn btn-outline-primary">ログイン</a>
-                <a href="/signup" class="btn btn-primary">新規登録</a>
+            <ul class="navbar-nav me-auto ms-lg-4">
+                <li class="nav-item"><a class="nav-link" href="#screens">画面紹介</a></li>
+                <li class="nav-item"><a class="nav-link" href="#features">機能</a></li>
+                <li class="nav-item"><a class="nav-link" href="#tech">技術</a></li>
+            </ul>
+            <div class="d-flex gap-2 py-2 py-lg-0 flex-wrap">
+                <form th:if="${demoEnabled}" th:action="@{/demo/start}" method="post" class="m-0">
+                    <button type="submit" class="btn btn-outline-primary">🧪 お試し</button>
+                </form>
+                <a th:href="@{/login}" class="btn btn-outline-secondary">ログイン</a>
+                <a th:href="@{/signup}" class="btn btn-primary">新規登録</a>
             </div>
         </div>
     </div>
 </nav>
 
-<!-- ヒーローセクション -->
-<section class="hero-section py-5">
-    <div class="container py-3 py-md-5">
+<!-- ヒーロー -->
+<section class="hero-section pt-5">
+    <div class="container pt-md-4">
+        <div th:if="${demoError}" class="alert alert-warning text-center" role="alert" th:text="${demoError}">
+            お試しアカウントを作成できませんでした。
+        </div>
         <div class="row justify-content-center">
-            <div class="col-12 col-lg-8 text-center">
-                <h1 class="display-5 fw-bold mb-3 lh-sm">
+            <div class="col-12 col-lg-9 text-center">
+                <h1 class="hero-title display-5 mb-3">
                     曲を作る、管理する、<br class="d-none d-sm-inline">完成まで届ける。
                 </h1>
-                <p class="lead text-muted mb-4">
-                    歌詞・コード進行・デモ音源をひとつの場所で。<br>
-                    納期カレンダーで制作スケジュールも管理できます。
+                <p class="hero-lead lead mb-4">
+                    歌詞・コード譜・デモ音源・納期を、ひとつの場所で。<br class="d-none d-md-inline">
+                    作りかけの曲が何曲あっても、どこまで進んだかがひと目で分かります。
                 </p>
                 <div class="d-flex gap-3 justify-content-center flex-wrap">
-                    <a href="/signup" class="btn btn-primary btn-lg px-4">無料で始める</a>
-                    <a href="/login" class="btn btn-outline-secondary btn-lg px-4">ログイン</a>
+                    <form th:if="${demoEnabled}" th:action="@{/demo/start}" method="post" class="m-0">
+                        <button type="submit" class="btn btn-primary btn-lg px-4 btn-demo">
+                            🧪 テストユーザーで試してみる
+                        </button>
+                    </form>
+                    <a th:href="@{/signup}" class="btn btn-outline-primary btn-lg px-4">無料で始める</a>
                 </div>
+                <p th:if="${demoEnabled}" class="demo-note mt-3 mb-0">
+                    登録不要・ワンクリックで、サンプルの曲が入った自分専用のお試し環境が開きます。<br class="d-none d-sm-inline">
+                    データは <span th:text="${demoTtlHours}">24</span> 時間後に自動で削除されます。
+                </p>
+            </div>
+        </div>
+        <div class="row justify-content-center mt-5">
+            <div class="col-12 col-xl-11">
+                <button type="button" class="shot" data-zoom="/images/landing/list.webp"
+                        data-caption="曲一覧（ステータス・タグ・納期・完了）">
+                    <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <img src="/images/landing/list.webp" width="1400" height="900" fetchpriority="high"
+                         alt="曲一覧の画面。曲ごとにステータス・タグ・納期・完了チェックが並び、納期を過ぎた曲の行は赤く表示される">
+                </button>
             </div>
         </div>
     </div>
 </section>
 
-<!-- 機能紹介セクション -->
-<section class="py-5 bg-white">
+<!-- 実際の画面 -->
+<section id="screens" class="py-5 my-md-4">
     <div class="container">
-        <h2 class="text-center fw-bold mb-5">主な機能</h2>
+        <div class="text-center mb-5">
+            <div class="section-eyebrow mb-2">SCREENS</div>
+            <h2 class="fw-bold">実際の作業画面</h2>
+            <p class="text-muted mb-0">画像をクリックすると拡大して見られます。</p>
+        </div>
+
+        <div class="row align-items-center g-4 g-lg-5 screen-row">
+            <div class="col-12 col-lg-7">
+                <button type="button" class="shot" data-zoom="/images/landing/studio-chord.webp"
+                        data-caption="スタジオ：コード譜">
+                    <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <img src="/images/landing/studio-chord.webp" width="1400" height="900" loading="lazy"
+                         alt="スタジオのコード譜画面。Excel のテンプレートと同じ見た目の表にコードを書き込める">
+                </button>
+            </div>
+            <div class="col-12 col-lg-5 screen-text">
+                <h3 class="h4 mb-3">🎼 コード譜を Excel 感覚で</h3>
+                <ul>
+                    <li>1小節2マス / 4マスのテンプレートを、表計算エディタでそのまま編集</li>
+                    <li>手元の Excel・PDF をインポート、Excel・PDF でエクスポート</li>
+                    <li>曲名・Key・BPM は見出しに自動で入ります</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="row align-items-center g-4 g-lg-5 screen-row flex-lg-row-reverse">
+            <div class="col-12 col-lg-7">
+                <button type="button" class="shot" data-zoom="/images/landing/studio-lyrics.webp"
+                        data-caption="スタジオ：歌詞と Key（五度圏）">
+                    <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <img src="/images/landing/studio-lyrics.webp" width="1400" height="900" loading="lazy"
+                         alt="スタジオの歌詞画面。Aメロ・Bメロ・サビのセクションごとに歌詞を書き、Key は五度圏から選べる">
+                </button>
+            </div>
+            <div class="col-12 col-lg-5 screen-text">
+                <h3 class="h4 mb-3">📝 歌詞はセクションごとに</h3>
+                <ul>
+                    <li>Aメロ・Bメロ・サビ…をカードで管理し、ドラッグで並び替え</li>
+                    <li>Key は五度圏から選択、BPM はキーボードで入力</li>
+                    <li>Word・テキスト・PDF で書き出し</li>
+                    <li>進捗率とデモ音源はヘッダーに常に表示</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="row align-items-center g-4 g-lg-5 screen-row">
+            <div class="col-12 col-lg-7">
+                <button type="button" class="shot" data-zoom="/images/landing/calendar.webp"
+                        data-caption="制作カレンダー">
+                    <span class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <img src="/images/landing/calendar.webp" width="1400" height="900" loading="lazy"
+                         alt="制作カレンダーの画面。納期のある曲が月のカレンダー上に色分けで表示される">
+                </button>
+            </div>
+            <div class="col-12 col-lg-5 screen-text">
+                <h3 class="h4 mb-3">📅 納期はカレンダーで</h3>
+                <ul>
+                    <li>納期を月のカレンダーで確認</li>
+                    <li>超過は赤・3日以内はオレンジで目立たせます</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="row align-items-center g-4 g-lg-5 screen-row flex-lg-row-reverse">
+            <div class="col-12 col-lg-7">
+                <div class="row g-3 justify-content-center">
+                    <div class="col-6">
+                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-list.webp"
+                                data-caption="スマホ：曲一覧">
+                            <img src="/images/landing/mobile-list.webp" width="375" height="760" loading="lazy"
+                                 alt="スマホで表示した曲一覧。曲がカード形式で並ぶ">
+                        </button>
+                    </div>
+                    <div class="col-6">
+                        <button type="button" class="shot shot-phone" data-zoom="/images/landing/mobile-studio.webp"
+                                data-caption="スマホ：スタジオ">
+                            <img src="/images/landing/mobile-studio.webp" width="375" height="760" loading="lazy"
+                                 alt="スマホで表示したスタジオ画面。進捗率・Key・BPM と歌詞が縦に並ぶ">
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-5 screen-text">
+                <h3 class="h4 mb-3">📱 スマホでも</h3>
+                <ul>
+                    <li>曲一覧はカード表示に切り替わります</li>
+                    <li>思いついた歌詞を、移動中にすぐメモできます</li>
+                    <li>ホーム画面に追加してアプリのように使えます（PWA）</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 主な機能 -->
+<section id="features" class="py-5 bg-light">
+    <div class="container">
+        <div class="text-center mb-5">
+            <div class="section-eyebrow mb-2">FEATURES</div>
+            <h2 class="fw-bold">主な機能</h2>
+        </div>
         <div class="row g-4">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6 col-lg-3">
                 <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body text-center p-4">
+                    <div class="card-body p-4">
                         <div class="feature-icon mb-3">🎵</div>
-                        <h5 class="card-title fw-bold mb-2">曲一覧・進捗管理</h5>
-                        <p class="card-text text-muted">
-                            ステータス / タグ / 納期 / メモを一覧管理。期限アラート付きで締め切り忘れを防ぎます。
+                        <h3 class="h6 fw-bold mb-2">曲一覧・進捗管理</h3>
+                        <p class="card-text text-muted small mb-0">
+                            ステータス・タグ・納期をその場で編集。ステータスは自分で追加でき、完了した曲はバックアップ一覧へ。
                         </p>
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6 col-lg-3">
                 <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">✏️</div>
-                        <h5 class="card-title fw-bold mb-2">スタジオ</h5>
-                        <p class="card-text text-muted">
-                            歌詞とコード進行を並列編集。BPM・Key・ダイアトニック解析・デモ音源も一括管理。
+                    <div class="card-body p-4">
+                        <div class="feature-icon mb-3">🎼</div>
+                        <h3 class="h6 fw-bold mb-2">コード譜</h3>
+                        <p class="card-text text-muted small mb-0">
+                            Excel テンプレートをそのまま編集。Excel・PDF の読み込み・書き出しに対応。
                         </p>
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6 col-lg-3">
                 <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body text-center p-4">
+                    <div class="card-body p-4">
+                        <div class="feature-icon mb-3">📝</div>
+                        <h3 class="h6 fw-bold mb-2">歌詞・デモ音源</h3>
+                        <p class="card-text text-muted small mb-0">
+                            セクション単位で歌詞を管理し、Word・PDF などで書き出し。デモ音源はアップロードしてすぐ再生。
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body p-4">
                         <div class="feature-icon mb-3">📅</div>
-                        <h5 class="card-title fw-bold mb-2">制作カレンダー</h5>
-                        <p class="card-text text-muted">
-                            納期を月次で可視化。コンベや録音スケジュールをひと目で把握できます。
+                        <h3 class="h6 fw-bold mb-2">制作カレンダー</h3>
+                        <p class="card-text text-muted small mb-0">
+                            納期を月次で可視化。コンペや録音のスケジュールをひと目で把握できます。
                         </p>
                     </div>
                 </div>
@@ -99,15 +278,33 @@
     </div>
 </section>
 
-<!-- 技術スタックセクション -->
-<section class="py-5 bg-light">
+<!-- お試しへの誘導 -->
+<section class="cta-band py-5">
+    <div class="container text-center py-md-3">
+        <h2 class="fw-bold mb-3">まずは触ってみてください</h2>
+        <p class="mb-4 opacity-75">サンプルの曲・歌詞・コード譜が入った状態で始まります。登録は不要です。</p>
+        <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <form th:if="${demoEnabled}" th:action="@{/demo/start}" method="post" class="m-0">
+                <button type="submit" class="btn btn-light btn-lg px-4 fw-bold text-primary">
+                    🧪 テストユーザーで試してみる
+                </button>
+            </form>
+            <a th:href="@{/signup}" class="btn btn-outline-light btn-lg px-4">無料で始める</a>
+        </div>
+    </div>
+</section>
+
+<!-- 技術スタック -->
+<section id="tech" class="py-5 bg-white">
     <div class="container text-center">
+        <div class="section-eyebrow mb-2">TECH</div>
         <h2 class="fw-bold mb-3">技術スタック</h2>
         <p class="text-muted mb-4">
-            Java 21 / Spring Boot 3 / Spring Security / MySQL / Docker でフルスクラッチ開発
+            Java 21 / Spring Boot 3 / Spring Security / Spring Data JPA / MySQL / Thymeleaf / Docker<br class="d-none d-md-inline">
+            コード譜: Jspreadsheet CE / Apache POI / Apache PDFBox ・ 音源: Cloudflare R2
         </p>
         <a href="https://github.com/ShotaArakawa/music-tracker" class="btn btn-outline-dark" target="_blank" rel="noopener noreferrer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2 mb-1" viewBox="0 0 16 16">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2 mb-1" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
             </svg>
             GitHub でソースを見る
@@ -116,12 +313,43 @@
 </section>
 
 <!-- フッター -->
-<footer class="py-4 bg-white border-top">
+<footer class="py-4 bg-light border-top">
     <div class="container text-center text-muted small">
-        &copy; 2025 作曲トラッカー
+        &copy; 2025 Music-Tracker
     </div>
 </footer>
 
+<!-- スクリーンショットの拡大表示 -->
+<div class="modal fade zoom-modal" id="zoom-modal" tabindex="-1" aria-label="スクリーンショットの拡大表示" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="text-end mb-2">
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <img id="zoom-image" src="" alt="">
+            <div class="zoom-caption" id="zoom-caption"></div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function () {
+        const modalEl = document.getElementById('zoom-modal');
+        const modal = new bootstrap.Modal(modalEl);
+        const image = document.getElementById('zoom-image');
+        const caption = document.getElementById('zoom-caption');
+        document.querySelectorAll('[data-zoom]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                image.src = btn.dataset.zoom;
+                image.alt = btn.querySelector('img').alt;
+                caption.textContent = btn.dataset.caption || '';
+                // スマホ画面の画像は細長いので小さめに表示する
+                modalEl.querySelector('.modal-dialog').classList.toggle('modal-sm', btn.classList.contains('shot-phone'));
+                modal.show();
+            });
+        });
+    })();
+</script>
 </body>
 </html>

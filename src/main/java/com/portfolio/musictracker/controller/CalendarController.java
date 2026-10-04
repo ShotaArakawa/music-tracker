@@ -48,6 +48,7 @@ public class CalendarController {
         m.put("raw", d.deadlineRaw());
         m.put("daysUntil", d.daysUntil());
         m.put("overdue", d.isOverdue());
+        m.put("done", d.done());
         return m;
     }
 }

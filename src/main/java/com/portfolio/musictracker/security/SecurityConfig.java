@@ -12,18 +12,17 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Spring Security 設定。
  * <ul>
- * <li>ログイン／ユーザー登録／静的リソース以外は認証必須</li>
+ * <li>ログイン／ユーザー登録／お試しログイン／静的リソース以外は認証必須</li>
  * <li>パスワードは {@link BCryptPasswordEncoder} で照合・ハッシュ化</li>
  * <li>フォームログイン（独自ログイン画面 /login）とログアウトを有効化</li>
+ * <li>CSRF 対策を有効化（フォーム・Ajax ともにトークンを送る）</li>
  * </ul>
- * <p>
- * 既存の多数の Ajax POST（並び替え・インライン編集・一括保存・テンプレート操作）を
- * そのまま動かすため、CSRF はこのアプリでは無効化している（ポートフォリオ用途）。
  */
 @Configuration
 public class SecurityConfig {
 
-    @Value("${REMEMBER_ME_KEY:musictracker-default-secret-key}")
+    /** Remember Me トークンの署名鍵。本番は環境変数 REMEMBER_ME_KEY 必須（未設定なら起動失敗）。 */
+    @Value("${app.security.remember-me-key}")
     private String rememberMeKey;
 
     @Bean
@@ -36,7 +35,7 @@ public class SecurityConfig {
             UserDetailsService userDetailsService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/login", "/signup", "/api/health",
+                        .requestMatchers("/", "/login", "/signup", "/api/health", "/demo/start",
                                 "/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico",
                                 // PWA関連（manifest / Service Worker / アイコン）は未認証で取得できるようにする
                                 "/manifest.json", "/sw.js", "/icon.png")
@@ -50,7 +49,10 @@ public class SecurityConfig {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/logout")
-                        .logoutSuccessUrl("/login?logout")
+                        // お試しアカウントの「新規登録へ」（/logout?to=signup）は新規登録画面へ、それ以外はログイン画面へ
+                        .logoutSuccessHandler((request, response, authentication) ->
+                                response.sendRedirect(request.getContextPath()
+                                        + ("signup".equals(request.getParameter("to")) ? "/signup" : "/login?logout")))
                         // ログアウト時は Remember Me の Cookie も明示的に削除する
                         .deleteCookies("remember-me")
                         .permitAll())
@@ -63,9 +65,9 @@ public class SecurityConfig {
                         .rememberMeParameter("remember-me")
                         .rememberMeCookieName("remember-me")
                         .tokenValiditySeconds(60 * 60 * 24 * 14) // 14日間
-                        .userDetailsService(userDetailsService))
-                // 全画面が同一オリジンの Ajax/フォームのみのため CSRF は無効化
-                .csrf(csrf -> csrf.disable());
+                        .userDetailsService(userDetailsService));
+        // CSRF は Spring Security の既定（有効）のまま。
+        // フォームは th:action が hidden の _csrf を付け、Ajax は共通 head の fetch ラッパーがヘッダーで送る。
 
         return http.build();
     }

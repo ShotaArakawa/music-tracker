@@ -9,10 +9,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MappedSuperclass;
 
 /**
- * 歌詞セクション・コードセクションが共通して持つ項目をまとめた基底クラス。
+ * セクション（現在は歌詞セクション）が共通して持つ項目をまとめた基底クラス。
  * <p>
- * 歌詞とコードはそれぞれ独立したテーブル（エンティティ）として管理するが、
- * 「見出し名・並び順・本文」という構造は共通なので、ここに集約する。
+ * 「見出し名・並び順・本文」という構造を持つセクションの共通部分をここに集約する。
  */
 @MappedSuperclass
 public abstract class AbstractSection {

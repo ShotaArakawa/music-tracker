@@ -34,6 +34,11 @@ import java.util.Set;
 @Table(name = "songs")
 public class Song {
 
+    /** キーの既定値（C メジャー）。 */
+    public static final String DEFAULT_KEY = "C";
+    /** BPM の既定値。 */
+    public static final int DEFAULT_BPM = 120;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -45,14 +50,39 @@ public class Song {
     @Column(length = 1000)
     private String memo;
 
-    /** 納期（締め切り）。「6/4」などの月日やフリーテキストでサッと入力できるよう文字列で保持する。 */
+    /**
+     * 納期（締め切り）。画面のカレンダーから選んだ日付を {@code yyyy-MM-dd} で保持する。
+     * 以前の自由入力（「6/4」など）の値も残っていれば {@code DeadlineParser} で日付として解釈する。
+     */
     @Column(length = 50)
     private String deadline;
+
+    /**
+     * 完了しているか（曲一覧の「完了」チェック）。ステータス「完了」と常に連動させる
+     * （{@link #changeStatus} / {@link #markCompleted} 経由で変更する）。
+     * 完了した曲は納期を過ぎても超過として警告せず、バックアップ一覧に表示する。
+     */
+    @Column(nullable = false)
+    private boolean deadlineDone = false;
+
+    /** 「完了」にする直前のステータス。チェックを外したときに戻すために覚えておく。 */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private Status previousStatus;
 
     @NotNull(message = "ステータスを選択してください")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private Status status = Status.LYRICS_WRITING;
+
+    /**
+     * ユーザーが追加したステータス。選んでいる間は {@link #status} より優先して表示する
+     * （{@link #status} には選ぶ前の既定のステータスが残り、追加したステータスを削除するとそこに戻る）。
+     * 「完了」にしている間は「完了」を表示し、完了を外すとこのステータスに戻る。
+     */
+    @ManyToOne
+    @JoinColumn(name = "custom_status_id")
+    private CustomStatus customStatus;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
@@ -72,12 +102,12 @@ public class Song {
 
     // ---- 作曲コア画面用の項目 ----
 
-    /** テンポ（BPM）。 */
-    private Integer bpm;
+    /** テンポ（BPM）。スタジオ画面で入力する。 */
+    private Integer bpm = DEFAULT_BPM;
 
-    /** キー（例: C, Am, F#m など）。 */
+    /** キー（例: C, Am, F#m など）。スタジオ画面の五度圏から選ぶ。 */
     @Column(length = 20)
-    private String musicKey;
+    private String musicKey = DEFAULT_KEY;
 
     /** 世界観・コンセプトのメモ。 */
     @Column(columnDefinition = "TEXT")
@@ -87,7 +117,7 @@ public class Song {
     @Column(nullable = false)
     private int lyricProgress = 0;
 
-    /** メロディの進捗率（0〜100）。 */
+    /** メロディの進捗率（0〜100）。画面からは廃止したが、保存済みの値を残すため列は維持する。 */
     @Column(nullable = false)
     private int melodyProgress = 0;
 
@@ -106,15 +136,10 @@ public class Song {
     /** 最後に詳細（作曲コア）画面を開いた日時。「最後に編集した曲」の特定に使う。 */
     private LocalDateTime lastOpenedAt;
 
-    /** 歌詞エリアのセクション。コードとは独立して並び順で管理する。 */
+    /** 歌詞エリアのセクション。並び順で管理する。 */
     @OneToMany(mappedBy = "song", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
     private List<LyricSection> lyricSections = new ArrayList<>();
-
-    /** コードエリアのセクション。歌詞とは独立して並び順で管理する。 */
-    @OneToMany(mappedBy = "song", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("sortOrder ASC")
-    private List<ChordSection> chordSections = new ArrayList<>();
 
     @CreationTimestamp
     @Column(updatable = false)
@@ -153,6 +178,102 @@ public class Song {
 
     public void setDeadline(String deadline) {
         this.deadline = deadline;
+    }
+
+    public boolean isDeadlineDone() {
+        return deadlineDone;
+    }
+
+    public void setDeadlineDone(boolean deadlineDone) {
+        this.deadlineDone = deadlineDone;
+    }
+
+    public Status getPreviousStatus() {
+        return previousStatus;
+    }
+
+    public void setPreviousStatus(Status previousStatus) {
+        this.previousStatus = previousStatus;
+    }
+
+    /** 完了しているか（ステータスが「完了」）。 */
+    public boolean isCompleted() {
+        return status == Status.RELEASED;
+    }
+
+    /**
+     * 既定のステータスを選ぶ。「完了」チェックを連動させ、追加したステータスの選択は外す
+     * （「完了」を選んだときだけは、完了を外したときに戻せるよう残しておく）。
+     */
+    public void changeStatus(Status newStatus) {
+        if (newStatus != Status.RELEASED) {
+            customStatus = null;
+        }
+        applyStatus(newStatus);
+    }
+
+    /** ユーザーが追加したステータスを選ぶ。完了していれば完了を外す。 */
+    public void changeStatus(CustomStatus newStatus) {
+        if (isCompleted()) {
+            applyStatus(statusBeforeCompletion());
+        }
+        customStatus = newStatus;
+    }
+
+    /** 既定のステータスを設定し、「完了」チェックを連動させる。「完了」にするときは直前のステータスを覚えておく。 */
+    private void applyStatus(Status newStatus) {
+        if (newStatus == null || newStatus == status) {
+            deadlineDone = isCompleted();
+            return;
+        }
+        if (newStatus == Status.RELEASED) {
+            previousStatus = status;
+        } else {
+            previousStatus = null;
+        }
+        status = newStatus;
+        deadlineDone = isCompleted();
+    }
+
+    /**
+     * 「完了」チェックの切り替え。チェックで「完了」に、外すと完了前のステータスに戻す
+     * （追加したステータスだった場合はそれに戻る）。
+     */
+    public void markCompleted(boolean completed) {
+        if (completed) {
+            applyStatus(Status.RELEASED);
+        } else if (isCompleted()) {
+            applyStatus(statusBeforeCompletion());
+        }
+    }
+
+    /** 完了前の既定のステータス（覚えていなければ「フルコーラス完成」）。 */
+    private Status statusBeforeCompletion() {
+        return previousStatus != null && previousStatus != Status.RELEASED
+                ? previousStatus : Status.FULL_CHORUS_DONE;
+    }
+
+    /** 画面で使うステータスのキー（既定は {@code ARRANGING} など、追加したものは {@code custom:12}）。 */
+    public String getStatusKey() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getKey() : status.name();
+    }
+
+    /** 表示するステータス名。 */
+    public String getStatusLabel() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getName() : status.getLabel();
+    }
+
+    /** 表示するステータスのバッジの色クラス。 */
+    public String getStatusColorClass() {
+        return (!isCompleted() && customStatus != null) ? customStatus.getColorClass() : status.getColorClass();
+    }
+
+    public CustomStatus getCustomStatus() {
+        return customStatus;
+    }
+
+    public void setCustomStatus(CustomStatus customStatus) {
+        this.customStatus = customStatus;
     }
 
     public Status getStatus() {
@@ -251,24 +372,10 @@ public class Song {
         this.lyricSections = lyricSections;
     }
 
-    public List<ChordSection> getChordSections() {
-        return chordSections;
-    }
-
-    public void setChordSections(List<ChordSection> chordSections) {
-        this.chordSections = chordSections;
-    }
-
     /** 歌詞セクションを末尾に追加し、双方向の関連を整える。 */
     public void addLyricSection(LyricSection section) {
         section.setSong(this);
         this.lyricSections.add(section);
-    }
-
-    /** コードセクションを末尾に追加し、双方向の関連を整える。 */
-    public void addChordSection(ChordSection section) {
-        section.setSong(this);
-        this.chordSections.add(section);
     }
 
     public String getAudioFilePath() {
@@ -295,8 +402,8 @@ public class Song {
         this.lastOpenedAt = lastOpenedAt;
     }
 
-    /** 3つの進捗率の平均を全体の進捗率（%）として返す。 */
+    /** 作詞と編曲の進捗率の平均を全体の進捗率（%）として返す。 */
     public int getOverallProgress() {
-        return Math.round((lyricProgress + melodyProgress + arrangementProgress) / 3.0f);
+        return Math.round((lyricProgress + arrangementProgress) / 2.0f);
     }
 }

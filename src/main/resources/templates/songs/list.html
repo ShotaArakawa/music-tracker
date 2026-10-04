@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <th:block th:replace="~{fragments/head :: commonHead('作曲トラッカー')}"></th:block>
+    <th:block th:replace="~{fragments/head :: commonHead('Music-Tracker')}"></th:block>
     <style>
         /* インライン編集できるセルであることを示す */
         td.editable { cursor: pointer; }
         td.editable:hover { background-color: #f1f5ff; }
-        td.editable.editing { background-color: #fff; }
+        td.editable.editing { background-color: #fff; cursor: default; }
         .cell-empty { color: #b8bec6; font-style: italic; }
         .inline-toast {
             position: fixed;
@@ -26,6 +26,88 @@
         .row-handle:active { cursor: grabbing; }
         tr.dragging { opacity: .45; background-color: #eef4ff; }
 
+        /* 納期 */
+        .done-cell { width: 4.5rem; text-align: center; white-space: nowrap; }
+        .done-check { width: 1.2rem; height: 1.2rem; cursor: pointer; }
+        .overdue-badge { font-size: .72rem; }
+        .deadline-editor { display: flex; gap: .3rem; align-items: center; }
+        .deadline-editor input { width: 10.5rem; }
+
+        /* ステータス・タグの選択ポップアップ（ワンクリックで開く） */
+        .pick-menu {
+            position: absolute; z-index: 2100;
+            min-width: 11rem; max-height: 60vh; overflow: auto;
+            background: #fff; border: 1px solid #d7dde4; border-radius: .5rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
+            padding: .3rem;
+        }
+        .pick-menu button {
+            display: flex; align-items: center; gap: .4rem; width: 100%;
+            border: 0; background: transparent; text-align: left;
+            border-radius: .35rem; padding: .35rem .5rem;
+        }
+        .pick-menu button:hover, .pick-menu button:focus { background: #eef4ff; outline: none; }
+        .pick-menu button.current { font-weight: 700; }
+        .pick-menu button.current::after { content: "✓"; margin-left: auto; color: #0d6efd; }
+
+        /* タグ管理 */
+        .tag-manager {
+            background: #fff; border: 1px solid #e3e6ea; border-radius: .6rem;
+            padding: .75rem; margin-top: .5rem;
+        }
+        .tag-chip {
+            display: inline-flex; align-items: center; gap: .3rem;
+            background: #f1f3f5; border: 1px solid #dee2e6; border-radius: 999px;
+            padding: .15rem .3rem .15rem .7rem; font-size: .85rem;
+        }
+        .tag-chip button {
+            border: 0; background: transparent; color: #8a929b;
+            line-height: 1; font-size: 1rem; padding: 0 .25rem; border-radius: 50%;
+        }
+        .tag-chip button:hover { color: #dc3545; background: #fde8e8; }
+
+        /* ---- セクション（楽曲一覧 / バックアップ一覧） ---- */
+        .section-title {
+            font-size: 1.15rem; font-weight: 700; color: #343a40;
+            display: flex; align-items: center;
+            padding-bottom: .4rem; margin-bottom: .8rem;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .song-section[data-archive="true"] .section-title { color: #6c757d; }
+        /* 楽曲一覧とバックアップ一覧で列の位置をそろえる */
+        .song-section table { table-layout: fixed; min-width: 860px; }
+        .song-section th:nth-child(1) { width: 34px; }
+        .song-section th:nth-child(2) { width: 22%; }
+        .song-section th:nth-child(3) { width: 13%; }
+        .song-section th:nth-child(4) { width: 17%; }
+        .song-section th:nth-child(5) { width: 17%; }
+        .song-section th:nth-child(6) { width: 4.5rem; }
+        .song-section th:nth-child(7) { width: 15.5rem; }
+        .song-section td { overflow-wrap: anywhere; }
+        .archive-table td { color: #6c757d; }
+
+        /* ---- ヒント（編集できる場所にカーソルを合わせると、半透明の吹き出しで表示） ---- */
+        .has-hint { position: relative; }
+        .has-hint::after {
+            content: attr(data-hint);
+            position: absolute; left: 50%; bottom: calc(100% + 2px);
+            transform: translate(-50%, 4px);
+            z-index: 1500;
+            background: rgba(33, 37, 41, .78);
+            color: #fff; font-size: .74rem; font-weight: 400; font-style: normal;
+            white-space: nowrap; pointer-events: none;
+            padding: .3rem .6rem; border-radius: .4rem;
+            opacity: 0; visibility: hidden;
+            transition: opacity .15s ease .35s, transform .15s ease .35s, visibility 0s linear .5s;
+            backdrop-filter: blur(2px);
+        }
+        .has-hint:hover::after {
+            opacity: 1; visibility: visible; transform: translate(-50%, 0);
+            transition: opacity .15s ease .35s, transform .15s ease .35s, visibility 0s linear .35s;
+        }
+        /* 編集中・ポップアップ表示中はヒントを出さない */
+        .has-hint.editing::after { display: none; }
+
         /* ---- モバイルカード ---- */
         .song-card {
             background: #fff;
@@ -33,31 +115,43 @@
             box-shadow: 0 1px 4px rgba(0,0,0,.07);
             padding: 1rem;
             margin-bottom: .75rem;
+            border-left: 4px solid transparent;
         }
+        .song-card.overdue { border-left-color: #dc3545; background: #fff5f5; }
 
         /* ---- タグ絞り込み横スクロール ---- */
         .tag-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; }
         .tag-scroll .d-flex { flex-wrap: nowrap; }
 
-        /* ---- FAB（新規登録） ---- */
-        .fab {
-            position: fixed;
-            bottom: 1.5rem; right: 1.5rem;
-            z-index: 1000;
-            width: 56px; height: 56px;
-            border-radius: 50%;
-            font-size: 1.5rem; line-height: 1;
-            padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 14px rgba(13,110,253,.4);
+        /* ---- セクションの折り畳み ---- */
+        .section-toggle {
+            display: flex; align-items: center; gap: .35rem;
+            border: 0; background: transparent; padding: 0;
+            font: inherit; color: inherit; text-align: left;
         }
+        .section-toggle:hover { color: #0d6efd; }
+        .section-toggle .chevron {
+            display: inline-block; width: 1.1rem; color: #8a929b;
+            transition: transform .15s ease;
+        }
+        .song-section.collapsed .chevron { transform: rotate(-90deg); }
+        .song-section.collapsed .section-title { margin-bottom: 0; }
+
+        /* ---- 新規追加の行 ---- */
+        .add-row td { background-color: #f3f8ff; border-bottom: 2px solid #cfe2ff; }
+        .add-row:hover td { background-color: #f3f8ff; }
+        .add-row .add-submit { min-width: 7rem; }
+
+        /* ステータスのポップアップ下部の「追加・削除」 */
+        .pick-menu .pick-divider { border-top: 1px solid #e3e6ea; margin: .25rem 0; }
+        .pick-menu .pick-manage { color: #0d6efd; font-size: .85rem; }
     </style>
 </head>
 <body class="bg-light">
 <div class="container py-4">
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h1 class="h3 mb-0">🎵 作曲トラッカー</h1>
+        <h1 class="h3 mb-0">🎵 Music-Tracker</h1>
         <div class="d-flex gap-2 flex-wrap">
             <a th:if="${lastOpenedSong != null}"
                th:href="@{/songs/{id}(id=${lastOpenedSong.id})}"
@@ -66,7 +160,6 @@
                 🎵 最後に編集した曲に戻る
             </a>
             <a th:href="@{/calendar}" class="btn btn-outline-primary">📅 カレンダー</a>
-            <a th:href="@{/songs/new}" class="btn btn-primary d-none d-md-inline-flex">＋ 新規登録</a>
             <span class="vr mx-1 d-none d-md-inline"></span>
             <a th:href="@{/profile}" class="btn btn-outline-secondary align-self-center"
                title="プロフィール設定">👤 <span th:text="${currentUsername}">user</span></a>
@@ -76,31 +169,29 @@
         </div>
     </div>
 
-    <!-- 納期アラート（期限が近い／超過している曲） -->
-    <div th:if="${alerts != null and !alerts.isEmpty()}"
-         class="alert alert-warning shadow-sm" role="alert">
-        <div class="fw-bold mb-2">⚠️ 期限が迫っている曲があります</div>
-        <div class="d-flex flex-wrap gap-2">
-            <a th:each="a : ${alerts}" th:href="@{/songs/{id}(id=${a.id})}"
-               class="badge text-decoration-none p-2"
-               th:classappend="${a.overdue} ? 'bg-danger' : 'bg-warning text-dark'">
-                <span th:text="${a.title}">曲名</span>
-                <span class="opacity-75" th:text="'｜納期 ' + ${a.deadlineRaw}">納期</span>
-                <span th:text="${a.overdue ? '（' + (-1 * a.daysUntil) + '日超過）' : (a.daysUntil == 0 ? '（本日締切）' : '（あと' + a.daysUntil + '日）')}">状態</span>
-            </a>
-        </div>
+    <!-- お試しアカウントの案内 -->
+    <div th:if="${demoUser}" class="alert alert-info d-flex flex-wrap align-items-center gap-2 py-2" role="status">
+        <span>🧪 <strong>お試しアカウント</strong>で利用中です。サンプルの曲を自由に編集してみてください。
+            データは <span th:text="${demoTtlHours}">24</span> 時間後に自動で削除されます。</span>
+        <!-- お試しアカウントからログアウトして新規登録画面へ -->
+        <form th:action="@{/logout(to='signup')}" method="post" class="m-0 ms-auto">
+            <button type="submit" class="btn btn-sm btn-primary text-nowrap">気に入ったら新規登録へ</button>
+        </form>
     </div>
 
     <!-- 保存・削除後のメッセージ -->
     <div th:if="${message}" class="alert alert-success" role="alert" th:text="${message}"></div>
 
-    <p class="text-muted small d-none d-md-block">
-        💡 曲名・ステータス・タグ・メモのセルをクリックすると、その場で編集できます（自動保存）。
-    </p>
-
-    <!-- タグ絞り込み -->
+    <!-- タグ絞り込みとタグ管理 -->
     <div class="mb-4">
-        <span class="fw-bold small d-block mb-1">タグで絞り込み:</span>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="fw-bold small">タグで絞り込み:</span>
+            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none manage-toggle"
+                    id="tag-manage-toggle" aria-expanded="false" aria-controls="tag-manager">🏷 タグを編集</button>
+            <span class="text-muted small">|</span>
+            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none manage-toggle"
+                    id="status-manage-toggle" aria-expanded="false" aria-controls="status-manager">🔖 ステータスを編集</button>
+        </div>
         <div class="tag-scroll">
             <div class="d-flex gap-1">
                 <a th:href="@{/songs}"
@@ -115,336 +206,254 @@
                    th:text="${tag.name}">タグ</a>
             </div>
         </div>
-    </div>
 
-    <!-- 曲一覧 -->
-    <div th:if="${songs.isEmpty()}" class="alert alert-info">
-        まだ曲が登録されていません。「＋ 新規登録」から追加してみましょう。
-    </div>
-
-    <!-- デスクトップ: テーブル表示 -->
-    <div class="table-responsive d-none d-md-block" th:unless="${songs.isEmpty()}">
-        <table class="table table-hover align-middle bg-white shadow-sm rounded">
-            <thead class="table-light">
-            <tr>
-                <th scope="col" class="drag-cell"></th>
-                <th scope="col">曲名</th>
-                <th scope="col">ステータス</th>
-                <th scope="col">タグ</th>
-                <th scope="col">納期</th>
-                <th scope="col">メモ</th>
-                <th scope="col" class="text-end">操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="song : ${songs}" th:attr="data-song-id=${song.id}">
-
-                <!-- ドラッグハンドル -->
-                <td class="drag-cell">
-                    <span class="row-handle" title="ドラッグで並び替え">⠿</span>
-                </td>
-
-                <!-- 曲名（インライン編集） -->
-                <td class="fw-bold editable" data-field="title"
-                    th:attr="data-value=${song.title}">
-                    <span class="cell-value" th:text="${song.title}">曲名</span>
-                </td>
-
-                <!-- ステータス（インライン編集） -->
-                <td class="editable" data-field="status"
-                    th:attr="data-value=${song.status.name()}">
-                    <span class="cell-value badge"
-                          th:classappend="${song.status.colorClass}"
-                          th:text="${song.status.label}">ステータス</span>
-                </td>
-
-                <!-- タグ（インライン編集：単一選択） -->
-                <td class="editable" data-field="tagId"
-                    th:attr="data-value=${song.tags.isEmpty()} ? '' : ${song.tags.iterator().next().id}">
-                    <span class="cell-value">
-                        <th:block th:if="${song.tags.isEmpty()}">
-                            <span class="cell-empty">（なし）</span>
-                        </th:block>
-                        <span th:each="tag : ${song.tags}"
-                              class="badge bg-light text-dark border me-1"
-                              th:text="${tag.name}">タグ</span>
-                    </span>
-                </td>
-
-                <!-- 納期（インライン編集） -->
-                <td class="editable text-nowrap" data-field="deadline"
-                    th:attr="data-value=${song.deadline}">
-                    <span class="cell-value small"
-                          th:text="${#strings.isEmpty(song.deadline)} ? '（未設定）' : ${song.deadline}"
-                          th:classappend="${#strings.isEmpty(song.deadline)} ? 'cell-empty' : ''">納期</span>
-                </td>
-
-                <!-- メモ（インライン編集） -->
-                <td class="editable" data-field="memo"
-                    th:attr="data-value=${song.memo}">
-                    <span class="cell-value text-muted small"
-                          th:text="${#strings.isEmpty(song.memo)} ? '（クリックして入力）' : ${song.memo}"
-                          th:classappend="${#strings.isEmpty(song.memo)} ? 'cell-empty' : ''">メモ</span>
-                </td>
-
-                <!-- 操作（スタジオを開く・削除） -->
-                <td class="text-end text-nowrap">
-                    <a th:href="@{/songs/{id}(id=${song.id})}"
-                       class="btn btn-primary fw-bold px-3">🎚️ スタジオを開く</a>
-                    <form th:action="@{/songs/{id}/delete(id=${song.id})}" method="post" class="d-inline"
-                          onsubmit="return confirm('本当に削除しますか？');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- モバイル: カード型一覧 -->
-    <div class="d-md-none" th:unless="${songs.isEmpty()}">
-        <div th:each="song : ${songs}" class="song-card">
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
-                <span class="badge flex-shrink-0"
-                      th:classappend="${song.status.colorClass}"
-                      th:text="${song.status.label}">ステータス</span>
+        <!-- タグの追加・削除（自分のタグだけ。削除すると付いている曲からも外れる） -->
+        <div class="tag-manager" id="tag-manager" hidden>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span th:each="tag : ${tags}" class="tag-chip">
+                    <span th:text="${tag.name}">タグ</span>
+                    <button type="button" class="tag-delete" th:attr="data-id=${tag.id},data-name=${tag.name}"
+                            th:title="'「' + ${tag.name} + '」を削除'">×</button>
+                </span>
+                <span th:if="${tags.isEmpty()}" class="text-muted small">タグはまだありません。</span>
             </div>
-            <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
-                <span th:each="tag : ${song.tags}"
-                      class="badge bg-light text-dark border"
-                      th:text="${tag.name}">タグ</span>
+            <form class="d-flex gap-2" id="tag-add-form" autocomplete="off">
+                <input type="text" class="form-control form-control-sm" id="tag-add-name" maxlength="50"
+                       placeholder="新しいタグ名（例: アニソン）" style="max-width: 18rem;" required>
+                <button type="submit" class="btn btn-sm btn-primary text-nowrap">＋ 追加</button>
+            </form>
+        </div>
+
+        <!-- ステータスの追加・削除（自分が追加したものだけ。削除するとその曲は既定のステータスに戻る） -->
+        <div class="tag-manager" id="status-manager" hidden>
+            <div class="small text-muted mb-2">
+                既定のステータスに加えて、自分用のステータスを追加できます（「完了」は完了チェックと連動します）。
             </div>
-            <div th:unless="${#strings.isEmpty(song.deadline)}" class="small text-muted mb-1">
-                📅 <span th:text="${song.deadline}">納期</span>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span th:each="s : ${statuses}" th:if="${s.custom()}" class="tag-chip">
+                    <span class="badge" th:classappend="${s.colorClass}" th:text="${s.label}">ステータス</span>
+                    <button type="button" class="status-delete" th:attr="data-id=${s.id},data-name=${s.label}"
+                            th:title="'「' + ${s.label} + '」を削除'">×</button>
+                </span>
+                <span th:if="${statuses.?[custom()].isEmpty()}" class="text-muted small">追加したステータスはまだありません。</span>
             </div>
-            <div th:unless="${#strings.isEmpty(song.memo)}"
-                 class="small text-muted mb-2 text-truncate"
-                 th:text="${song.memo}"></div>
-            <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
+            <form class="d-flex gap-2 flex-wrap" id="status-add-form" autocomplete="off">
+                <input type="text" class="form-control form-control-sm" id="status-add-name" maxlength="30"
+                       placeholder="新しいステータス名（例: ミックス中）" style="max-width: 18rem;" required>
+                <select class="form-select form-select-sm" id="status-add-color" style="max-width: 9rem;"
+                        aria-label="バッジの色">
+                    <option th:each="c : ${statusColors}" th:value="${c.name()}" th:text="${c.label}"
+                            th:attr="data-class=${c.colorClass}">色</option>
+                </select>
+                <span class="badge align-self-center" id="status-add-preview">プレビュー</span>
+                <button type="submit" class="btn btn-sm btn-primary text-nowrap">＋ 追加</button>
+            </form>
         </div>
     </div>
 
-    <!-- スマホ用 FAB（新規登録） -->
-    <a th:href="@{/songs/new}" class="btn btn-primary fab d-md-none" title="新規登録">＋</a>
+    <!-- 楽曲一覧（作業中の曲）と、完了した曲のバックアップ一覧 -->
+    <section th:each="sec : ${sections}" class="song-section mb-5" th:attr="data-archive=${sec.archive}">
+        <!-- 見出しをクリックすると折り畳み／展開（状態はブラウザに記憶） -->
+        <h2 class="section-title">
+            <button type="button" class="section-toggle" aria-expanded="true"
+                    th:attr="aria-controls=${sec.archive} ? 'section-archive' : 'section-active'"
+                    th:title="${sec.archive} ? 'バックアップ一覧を折り畳む／開く' : '楽曲一覧を折り畳む／開く'">
+                <span class="chevron" aria-hidden="true">▾</span>
+                <span th:text="${sec.archive} ? '🗂 ' + ${sec.title} : '🎵 ' + ${sec.title}">楽曲一覧</span>
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-1"
+                      th:text="${sec.songs.size()} + '曲'">0曲</span>
+            </button>
+        </h2>
+
+        <div class="section-content" th:id="${sec.archive} ? 'section-archive' : 'section-active'">
+
+        <div th:if="${sec.songs.isEmpty() and sec.archive}" class="alert alert-light border text-muted"
+             th:text="${sec.emptyMessage}">
+            まだ曲がありません。
+        </div>
+
+        <!-- デスクトップ: テーブル表示（楽曲一覧は1行目が新規追加用の行） -->
+        <div class="table-responsive d-none d-md-block" th:unless="${sec.songs.isEmpty() and sec.archive}">
+            <table class="table table-hover align-middle bg-white shadow-sm rounded"
+                   th:classappend="${sec.archive} ? 'archive-table' : ''">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col" class="drag-cell"></th>
+                    <th scope="col">曲名</th>
+                    <th scope="col">ステータス</th>
+                    <th scope="col">タグ</th>
+                    <th scope="col">納期</th>
+                    <th scope="col" class="done-cell">完了</th>
+                    <th scope="col" class="text-end">操作</th>
+                </tr>
+                </thead>
+                <!-- 新規追加の行（曲名を入れて Enter か「＋ 追加」。ほかの項目は任意） -->
+                <tbody th:unless="${sec.archive}" class="add-body">
+                <tr class="add-row">
+                    <td class="drag-cell text-primary fw-bold">＋</td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm add-title" maxlength="200"
+                               placeholder="新しい曲名を入力…" aria-label="新しい曲の曲名">
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm add-status" aria-label="ステータス">
+                            <option th:each="s : ${statuses}" th:unless="${s.key == 'RELEASED'}"
+                                    th:value="${s.key}" th:text="${s.label}">ステータス</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm add-tag" aria-label="タグ">
+                            <option value="">（なし）</option>
+                            <option th:each="t : ${tags}" th:value="${t.id}"
+                                    th:selected="${selectedTagId != null and selectedTagId == t.id}"
+                                    th:text="${t.name}">タグ</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="date" class="form-control form-control-sm add-deadline" aria-label="納期">
+                    </td>
+                    <td class="done-cell"></td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-success fw-bold px-3 add-submit">＋ 追加</button>
+                    </td>
+                </tr>
+                </tbody>
+                <tbody class="song-body">
+                <tr th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}"
+                    th:attr="data-song-id=${song.id}"
+                    th:classappend="${dl != null and dl.overdue} ? 'table-danger' : ''">
+
+                    <!-- ドラッグハンドル -->
+                    <td class="drag-cell has-hint" data-hint="ドラッグで並び替え">
+                        <span class="row-handle">⠿</span>
+                    </td>
+
+                    <!-- 曲名（インライン編集） -->
+                    <td class="fw-bold editable has-hint" data-field="title" data-hint="クリックして曲名を編集"
+                        th:attr="data-value=${song.title}">
+                        <span class="cell-value" th:text="${song.title}">曲名</span>
+                    </td>
+
+                    <!-- ステータス（クリックで選択ポップアップ） -->
+                    <td class="editable has-hint" data-field="status" data-hint="クリックしてステータスを選択"
+                        th:attr="data-value=${song.statusKey}">
+                        <span class="cell-value badge"
+                              th:classappend="${song.statusColorClass}"
+                              th:text="${song.statusLabel}">ステータス</span>
+                    </td>
+
+                    <!-- タグ（クリックで選択ポップアップ：単一選択） -->
+                    <td class="editable has-hint" data-field="tagId" data-hint="クリックしてタグを選択"
+                        th:attr="data-value=${song.tags.isEmpty()} ? '' : ${song.tags.iterator().next().id}">
+                        <span class="cell-value">
+                            <th:block th:if="${song.tags.isEmpty()}">
+                                <span class="cell-empty">（なし）</span>
+                            </th:block>
+                            <span th:each="tag : ${song.tags}"
+                                  class="badge bg-light text-dark border me-1"
+                                  th:text="${tag.name}">タグ</span>
+                        </span>
+                    </td>
+
+                    <!-- 納期（クリックでカレンダーから選択） -->
+                    <td class="editable text-nowrap has-hint" data-field="deadline"
+                        data-hint="クリックしてカレンダーから納期を選択"
+                        th:attr="data-value=${dl != null} ? ${dl.date} : ''">
+                        <span class="cell-value small">
+                            <th:block th:if="${#strings.isEmpty(song.deadline)}"><span class="cell-empty">（未設定）</span></th:block>
+                            <th:block th:unless="${#strings.isEmpty(song.deadline)}">
+                                <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">2026/06/10</span>
+                                <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge ms-1"
+                                      th:text="${-dl.daysUntil} + '日超過'">超過</span>
+                            </th:block>
+                        </span>
+                    </td>
+
+                    <!-- 完了チェック（ステータス「完了」と連動。完了した曲はバックアップ一覧へ） -->
+                    <td class="done-cell has-hint"
+                        th:attr="data-hint=${sec.archive} ? 'チェックを外すと楽曲一覧に戻ります' : 'チェックすると「完了」にしてバックアップ一覧へ移動'">
+                        <input type="checkbox" class="form-check-input done-check" th:checked="${song.deadlineDone}"
+                               aria-label="完了">
+                    </td>
+
+                    <!-- 操作（スタジオを開く・削除） -->
+                    <td class="text-end text-nowrap">
+                        <a th:href="@{/songs/{id}(id=${song.id})}"
+                           class="btn btn-primary fw-bold px-3">🎚️ スタジオを開く</a>
+                        <form th:action="@{/songs/{id}/delete(id=${song.id})}" method="post" class="d-inline"
+                              onsubmit="return confirm('本当に削除しますか？');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div th:if="${sec.songs.isEmpty() and !sec.archive}" class="text-muted small px-1 mb-3 d-none d-md-block"
+             th:text="${sec.emptyMessage}">まだ曲がありません。</div>
+
+        <!-- モバイル: 新規追加（曲名だけ入れて追加。ほかの項目は一覧で編集） -->
+        <form th:unless="${sec.archive}" class="d-md-none song-card d-flex gap-2 mobile-add" autocomplete="off">
+            <input type="text" class="form-control add-title" maxlength="200" placeholder="新しい曲名を入力…"
+                   aria-label="新しい曲の曲名">
+            <button type="submit" class="btn btn-success fw-bold text-nowrap">＋ 追加</button>
+        </form>
+
+        <!-- モバイル: カード型一覧 -->
+        <div class="d-md-none" th:unless="${sec.songs.isEmpty()}">
+            <div th:each="song : ${sec.songs}" th:with="dl=${deadlines[song.id]}" class="song-card"
+                 th:attr="data-song-id=${song.id}"
+                 th:classappend="${dl != null and dl.overdue} ? 'overdue' : ''">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <div class="fw-bold" style="font-size: 1.05rem;" th:text="${song.title}">曲名</div>
+                    <span class="badge flex-shrink-0"
+                          th:classappend="${song.statusColorClass}"
+                          th:text="${song.statusLabel}">ステータス</span>
+                </div>
+                <div th:unless="${song.tags.isEmpty()}" class="d-flex flex-wrap gap-1 mb-2">
+                    <span th:each="tag : ${song.tags}"
+                          class="badge bg-light text-dark border"
+                          th:text="${tag.name}">タグ</span>
+                </div>
+                <div class="small text-muted mb-2 d-flex align-items-center gap-2 flex-wrap">
+                    <span th:unless="${#strings.isEmpty(song.deadline)}">📅 <span th:text="${dl != null} ? ${#temporals.format(dl.date, 'yyyy/MM/dd')} : ${song.deadline}">納期</span></span>
+                    <span th:if="${dl != null and dl.overdue}" class="badge bg-danger overdue-badge"
+                          th:text="${-dl.daysUntil} + '日超過'">超過</span>
+                    <label class="d-inline-flex align-items-center gap-1 ms-auto">
+                        <input type="checkbox" class="form-check-input done-check m-0" th:checked="${song.deadlineDone}">
+                        完了
+                    </label>
+                </div>
+                <a th:href="@{/songs/{id}(id=${song.id})}" class="btn btn-primary w-100 py-2">🎚️ スタジオを開く</a>
+            </div>
+        </div>
+
+        <div th:if="${sec.songs.isEmpty() and !sec.archive}" class="text-muted small px-1 d-md-none"
+             th:text="${sec.emptyMessage}">まだ曲がありません。</div>
+        </div>
+    </section>
 
 </div>
 
-<!-- インライン編集用の select テンプレート（JSが複製して使う） -->
+<!-- ポップアップの選択肢（JS が読み取って使う） -->
 <template id="tpl-status">
-    <select class="form-select form-select-sm inline-edit">
-        <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${s.label}">ステータス</option>
-    </select>
+    <button type="button" th:each="s : ${statuses}" th:attr="data-value=${s.key}">
+        <span class="badge" th:classappend="${s.colorClass}" th:text="${s.label}">ステータス</span>
+    </button>
+    <div class="pick-divider"></div>
+    <button type="button" class="pick-manage" data-manage="status">＋ ステータスを追加・削除…</button>
 </template>
 <template id="tpl-tag">
-    <select class="form-select form-select-sm inline-edit">
-        <option value="">（なし）</option>
-        <option th:each="t : ${tags}" th:value="${t.id}" th:text="${t.name}">タグ</option>
-    </select>
+    <button type="button" data-value=""><span class="cell-empty">（なし）</span></button>
+    <button type="button" th:each="t : ${tags}" th:attr="data-value=${t.id}">
+        <span class="badge bg-light text-dark border" th:text="${t.name}">タグ</span>
+    </button>
 </template>
 
 <!-- 保存トースト -->
 <div class="alert alert-success inline-toast shadow" id="inline-toast" role="alert">保存しました</div>
 
-<script>
-    function esc(s) {
-        return (s == null ? '' : String(s))
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    function showToast(text, ok) {
-        const toast = document.getElementById('inline-toast');
-        toast.textContent = text;
-        toast.className = 'alert inline-toast shadow ' + (ok ? 'alert-success' : 'alert-danger');
-        toast.style.display = 'block';
-        clearTimeout(toast._t);
-        toast._t = setTimeout(() => { toast.style.display = 'none'; }, 2000);
-    }
-
-    // 編集後にセルの表示を再描画する
-    function renderCell(td, field, data) {
-        if (field === 'title') {
-            td.dataset.value = data.title;
-            td.innerHTML = '<span class="cell-value">' + esc(data.title) + '</span>';
-        } else if (field === 'memo') {
-            td.dataset.value = data.memo == null ? '' : data.memo;
-            if (data.memo) {
-                td.innerHTML = '<span class="cell-value text-muted small">' + esc(data.memo) + '</span>';
-            } else {
-                td.innerHTML = '<span class="cell-value text-muted small cell-empty">（クリックして入力）</span>';
-            }
-        } else if (field === 'deadline') {
-            td.dataset.value = data.deadline == null ? '' : data.deadline;
-            if (data.deadline) {
-                td.innerHTML = '<span class="cell-value small">' + esc(data.deadline) + '</span>';
-            } else {
-                td.innerHTML = '<span class="cell-value small cell-empty">（未設定）</span>';
-            }
-        } else if (field === 'status') {
-            td.dataset.value = data.statusName;
-            td.innerHTML = '<span class="cell-value badge ' + esc(data.statusColorClass) + '">'
-                + esc(data.statusLabel) + '</span>';
-        } else if (field === 'tagId') {
-            const tags = data.tags || [];
-            td.dataset.value = tags.length ? tags[0].id : '';
-            if (tags.length) {
-                td.innerHTML = '<span class="cell-value">'
-                    + tags.map(t => '<span class="badge bg-light text-dark border me-1">'
-                        + esc(t.name) + '</span>').join('')
-                    + '</span>';
-            } else {
-                td.innerHTML = '<span class="cell-value"><span class="cell-empty">（なし）</span></span>';
-            }
-        }
-    }
-
-    // 編集モードを開始する
-    function startEdit(td) {
-        if (td.classList.contains('editing')) return;
-        const field = td.dataset.field;
-        const currentValue = td.dataset.value || '';
-        const originalHTML = td.innerHTML;
-        td.classList.add('editing');
-
-        let editor;
-        if (field === 'status') {
-            editor = document.getElementById('tpl-status').content.firstElementChild.cloneNode(true);
-            editor.value = currentValue;
-        } else if (field === 'tagId') {
-            editor = document.getElementById('tpl-tag').content.firstElementChild.cloneNode(true);
-            editor.value = currentValue;
-        } else {
-            editor = document.createElement('input');
-            editor.type = 'text';
-            editor.className = 'form-control form-control-sm inline-edit';
-            editor.value = currentValue;
-        }
-
-        td.innerHTML = '';
-        td.appendChild(editor);
-        editor.focus();
-        if (editor.select) editor.select();
-
-        let done = false;
-        const songId = td.closest('tr').dataset.songId;
-
-        function finish(commit) {
-            if (done) return;
-            done = true;
-            td.classList.remove('editing');
-            if (!commit) {
-                td.innerHTML = originalHTML;
-                return;
-            }
-            save(td, field, songId, editor.value, originalHTML);
-        }
-
-        // select は change で確定する。
-        // blur は「選択せず別の場所をクリックした」場合のキャンセル用だが、
-        // 環境によっては option 選択時に blur が change より先に（＝まだ旧値のまま）
-        // 発火し、旧値で保存→done で本来の change が無視される不具合があった。
-        // そのため blur のキャンセル処理は setTimeout で遅延させ、
-        // 同一イベントループ内で同期的に発火する change を必ず先に確定させる。
-        if (editor.tagName === 'SELECT') {
-            editor.addEventListener('change', () => finish(true));
-            editor.addEventListener('blur', () => setTimeout(() => finish(false), 0));
-        } else {
-            editor.addEventListener('blur', () => finish(true));
-            editor.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-            });
-        }
-    }
-
-    // Ajaxで1項目を保存する
-    function save(td, field, songId, value, originalHTML) {
-        fetch('/songs/' + songId + '/field', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ field: field, value: value })
-        }).then(res => res.json().then(data => ({ ok: res.ok, data: data })))
-          .then(({ ok, data }) => {
-              if (!ok) {
-                  td.innerHTML = originalHTML;
-                  showToast(data.error || '保存に失敗しました', false);
-                  return;
-              }
-              renderCell(td, field, data);
-              showToast('保存しました', true);
-          }).catch(() => {
-              td.innerHTML = originalHTML;
-              showToast('通信に失敗しました', false);
-          });
-    }
-
-    document.querySelectorAll('td.editable').forEach(td => {
-        td.addEventListener('click', () => startEdit(td));
-    });
-
-    /* ===== 行のドラッグ&ドロップ並び替え ===== */
-    let dragRow = null;
-
-    function getRowAfter(tbody, y) {
-        const rows = [...tbody.querySelectorAll('tr:not(.dragging)')];
-        return rows.reduce((closest, row) => {
-            const box = row.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: row };
-            }
-            return closest;
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-    function saveOrder() {
-        const ids = [...document.querySelectorAll('tbody tr')]
-            .map(tr => parseInt(tr.dataset.songId, 10));
-        if (!ids.length) return;
-        fetch('/songs/reorder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(ids)
-        }).then(res => {
-            if (!res.ok) throw new Error('reorder failed');
-            return res.json();
-        }).then(() => showToast('順序を保存しました', true))
-          .catch(() => showToast('順序の保存に失敗しました', false));
-    }
-
-    const tbody = document.querySelector('tbody');
-    if (tbody) {
-        tbody.querySelectorAll('tr').forEach(tr => {
-            const handle = tr.querySelector('.row-handle');
-            if (!handle) return;
-            // ハンドルからのみドラッグ開始（セルのインライン編集を妨げない）
-            handle.addEventListener('mousedown', () => tr.setAttribute('draggable', 'true'));
-            handle.addEventListener('mouseup', () => tr.removeAttribute('draggable'));
-            tr.addEventListener('dragstart', (e) => {
-                dragRow = tr;
-                tr.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-            });
-            tr.addEventListener('dragend', () => {
-                tr.classList.remove('dragging');
-                tr.removeAttribute('draggable');
-                dragRow = null;
-                saveOrder();
-            });
-        });
-        tbody.addEventListener('dragover', (e) => {
-            if (!dragRow) return;
-            e.preventDefault();
-            const after = getRowAfter(tbody, e.clientY);
-            if (after == null) {
-                tbody.appendChild(dragRow);
-            } else {
-                tbody.insertBefore(dragRow, after);
-            }
-        });
-        tbody.addEventListener('drop', (e) => e.preventDefault());
-    }
-</script>
+<script th:src="@{/js/list.js}"></script>
 </body>
 </html>
